@@ -9,6 +9,13 @@
 #include "../bcs/init.h"
 #include "../bcs/decoder.h"
 
+// Forward declarations for functions defined later in this file
+static parser_status_e skip_type_tag(buffer_t *buf, uint8_t depth);
+static parser_status_e skip_all_type_args(buffer_t *buf);
+static generic_arg_type_t infer_arg_type(uint32_t len);
+parser_status_e multisig_vote_deserialize(buffer_t *buf, transaction_t *tx);
+parser_status_e multisig_create_with_owners_deserialize(buffer_t *buf, transaction_t *tx);
+
 parser_status_e transaction_deserialize(buffer_t *buf, transaction_t *tx) {
     if (buf->size > MAX_TRANSACTION_LEN) {
         return WRONG_LENGTH_ERROR;
