@@ -1,5 +1,7 @@
 #pragma once
 
+#include "../bcs/types.h"
+
 #define UI_PREPARED -10
 
 extern char g_bip32_path[60];
@@ -10,6 +12,13 @@ extern char g_struct[120];
 extern char g_function[120];
 extern char g_amount[30];
 extern int g_is_token_listed;
+
+#define MAX_GENERIC_ARG_DISPLAY_LEN 70  // "0x" + 64 hex chars + null
+extern char g_arg_labels[MAX_GENERIC_ARGS][20];
+extern char g_arg_values[MAX_GENERIC_ARGS][MAX_GENERIC_ARG_DISPLAY_LEN];
+extern int g_num_display_args;
+extern char g_extra_info[30];
+extern char g_multisig_addr[67];
 
 #include "../types.h"
 
@@ -48,6 +57,15 @@ int ui_prepare_tx_fungible_asset_transfer(void);
 
 int ui_display_delegation_pool_transfer(entry_function_known_type_t function_type);
 int ui_prepare_delegation_pool_transfer(void);
+
+int ui_display_generic_entry_function(void);
+int ui_prepare_generic_entry_function(void);
+
+int ui_display_script_payload(void);
+int ui_prepare_script_payload(void);
+
+int ui_display_multisig_payload(void);
+int ui_prepare_multisig_payload(void);
 
 #if defined(TARGET_STAX) || defined(TARGET_FLEX)
 #define ICON_APP_HOME C_aptos_logo_64px

@@ -33,7 +33,7 @@
 
 static use_case_review_ctx_t blind_sign_ctx;
 
-nbgl_contentTagValue_t pairs[6];
+nbgl_contentTagValue_t pairs[12];
 nbgl_contentTagValueList_t pair_list;
 
 static void blind_sign_info() {

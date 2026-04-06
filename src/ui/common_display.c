@@ -44,6 +44,11 @@ char g_struct[120];
 char g_function[120];
 char g_amount[30];
 int g_is_token_listed;
+char g_arg_labels[MAX_GENERIC_ARGS][20];
+char g_arg_values[MAX_GENERIC_ARGS][MAX_GENERIC_ARG_DISPLAY_LEN];
+int g_num_display_args;
+char g_extra_info[30];
+char g_multisig_addr[67];
 
 #define MAX_COIN_TYPE_LEN 110
 #define MAX_TOKEN_LEN     30
@@ -287,19 +292,9 @@ int ui_prepare_transaction() {
                 case PAYLOAD_ENTRY_FUNCTION:
                     return ui_display_entry_function();
                 case PAYLOAD_SCRIPT:
-                    memset(g_tx_type, 0, sizeof(g_tx_type));
-                    snprintf(g_tx_type,
-                             sizeof(g_tx_type),
-                             "%s [payload = SCRIPT]",
-                             RAW_TRANSACTION_SALT);
-                    break;
+                    return ui_display_script_payload();
                 case PAYLOAD_MULTISIG:
-                    memset(g_tx_type, 0, sizeof(g_tx_type));
-                    snprintf(g_tx_type,
-                             sizeof(g_tx_type),
-                             "%s [payload = MULTISIG]",
-                             RAW_TRANSACTION_SALT);
-                    break;
+                    return ui_display_multisig_payload();
                 default:
                     memset(g_tx_type, 0, sizeof(g_tx_type));
                     snprintf(g_tx_type,
@@ -362,10 +357,7 @@ int ui_prepare_entry_function() {
         case FUNC_WITHDRAW_STAKE:
             return ui_display_delegation_pool_transfer(function->known_type);
         default:
-            memset(g_tx_type, 0, sizeof(g_tx_type));
-            snprintf(g_tx_type, sizeof(g_tx_type), "Function call");
-            PRINTF("Tx Type: %s\n", g_tx_type);
-            break;
+            return ui_display_generic_entry_function();
     }
 
     return UI_PREPARED;
@@ -541,6 +533,219 @@ int ui_prepare_delegation_pool_transfer() {
 
     snprintf(g_amount, sizeof(g_amount), "APT %.*s", sizeof(amount), amount);
     PRINTF("Amount: %s\n", g_amount);
+
+    return UI_PREPARED;
+}
+
+static const char *generic_arg_type_hint(generic_arg_type_t type, uint32_t len) {
+    (void) len;
+    switch (type) {
+        case ARG_TYPE_U8:
+            return "likely u8";
+        case ARG_TYPE_U16:
+            return "likely u16";
+        case ARG_TYPE_U32:
+            return "likely u32";
+        case ARG_TYPE_U64:
+            return "likely u64";
+        case ARG_TYPE_U128:
+            return "likely u128";
+        case ARG_TYPE_ADDRESS:
+            return "likely addr";
+        case ARG_TYPE_BOOL:
+            return "likely bool";
+        default:
+            return "bytes";
+    }
+}
+
+static void format_generic_arg(const generic_arg_t *arg, int index) {
+    memset(g_arg_labels[index], 0, sizeof(g_arg_labels[index]));
+    memset(g_arg_values[index], 0, sizeof(g_arg_values[index]));
+
+    const char *hint = generic_arg_type_hint(arg->type, arg->raw_len);
+    snprintf(g_arg_labels[index], sizeof(g_arg_labels[index]), "Arg #%d (%s)", index + 1, hint);
+
+    if (arg->raw_len == 0 || arg->raw_ptr == NULL) {
+        snprintf(g_arg_values[index], sizeof(g_arg_values[index]), "(empty)");
+        return;
+    }
+
+    // Display as hex, truncate if needed
+    if (2 + arg->raw_len * 2 + 1 <= sizeof(g_arg_values[index])) {
+        format_prefixed_hex(arg->raw_ptr,
+                            arg->raw_len,
+                            g_arg_values[index],
+                            sizeof(g_arg_values[index]));
+    } else {
+        // Truncate: show as much hex as fits with "..." suffix
+        size_t max_bytes = (sizeof(g_arg_values[index]) - 2 - 3 - 1) / 2;
+        format_prefixed_hex(arg->raw_ptr,
+                            max_bytes,
+                            g_arg_values[index],
+                            sizeof(g_arg_values[index]));
+        size_t hex_end = 2 + max_bytes * 2;
+        if (hex_end + 3 < sizeof(g_arg_values[index])) {
+            g_arg_values[index][hex_end] = '.';
+            g_arg_values[index][hex_end + 1] = '.';
+            g_arg_values[index][hex_end + 2] = '.';
+            g_arg_values[index][hex_end + 3] = '\0';
+        }
+    }
+}
+
+int ui_prepare_generic_entry_function() {
+    args_generic_t *generic =
+        &G_context.tx_info.transaction.payload.entry_function.args.generic;
+
+    memset(g_tx_type, 0, sizeof(g_tx_type));
+    snprintf(g_tx_type, sizeof(g_tx_type), "Function call");
+
+    g_num_display_args = (int) generic->num_parsed;
+
+    for (int i = 0; i < g_num_display_args; i++) {
+        format_generic_arg(&generic->args[i], i);
+    }
+
+    memset(g_extra_info, 0, sizeof(g_extra_info));
+    if (generic->num_args > generic->num_parsed) {
+        snprintf(g_extra_info,
+                 sizeof(g_extra_info),
+                 "+%d more args",
+                 (int) (generic->num_args - generic->num_parsed));
+    }
+
+    return UI_PREPARED;
+}
+
+static const char *script_arg_type_name(script_arg_variant_t variant) {
+    switch (variant) {
+        case SCRIPT_ARG_BOOL:
+            return "bool";
+        case SCRIPT_ARG_U8:
+            return "u8";
+        case SCRIPT_ARG_U16:
+            return "u16";
+        case SCRIPT_ARG_U32:
+            return "u32";
+        case SCRIPT_ARG_U64:
+            return "u64";
+        case SCRIPT_ARG_U128:
+            return "u128";
+        case SCRIPT_ARG_ADDRESS:
+            return "address";
+        case SCRIPT_ARG_U8_VECTOR:
+            return "bytes";
+        case SCRIPT_ARG_U256:
+            return "u256";
+        default:
+            return "unknown";
+    }
+}
+
+int ui_prepare_script_payload() {
+    script_payload_parsed_t *script = &G_context.tx_info.transaction.payload.script_parsed;
+
+    memset(g_tx_type, 0, sizeof(g_tx_type));
+    snprintf(g_tx_type, sizeof(g_tx_type), "Script execution");
+
+    g_num_display_args = (int) script->num_parsed;
+
+    for (int i = 0; i < g_num_display_args; i++) {
+        memset(g_arg_labels[i], 0, sizeof(g_arg_labels[i]));
+        memset(g_arg_values[i], 0, sizeof(g_arg_values[i]));
+
+        const char *type_name = script_arg_type_name(script->args[i].variant);
+        snprintf(g_arg_labels[i], sizeof(g_arg_labels[i]), "Arg #%d (%s)", i + 1, type_name);
+
+        if (script->args[i].raw_len == 0 || script->args[i].raw_ptr == NULL) {
+            snprintf(g_arg_values[i], sizeof(g_arg_values[i]), "(empty)");
+            continue;
+        }
+
+        // Reuse hex formatting from generic arg display
+        generic_arg_t tmp = {.type = ARG_TYPE_BYTES,
+                             .raw_len = script->args[i].raw_len,
+                             .raw_ptr = script->args[i].raw_ptr};
+        format_generic_arg(&tmp, i);
+        // Restore the definitive label (format_generic_arg overwrites it)
+        snprintf(g_arg_labels[i], sizeof(g_arg_labels[i]), "Arg #%d (%s)", i + 1, type_name);
+    }
+
+    memset(g_extra_info, 0, sizeof(g_extra_info));
+    if (script->num_args > script->num_parsed) {
+        snprintf(g_extra_info,
+                 sizeof(g_extra_info),
+                 "+%d more args",
+                 (int) (script->num_args - script->num_parsed));
+    }
+
+    return UI_PREPARED;
+}
+
+int ui_prepare_multisig_payload() {
+    transaction_t *tx = &G_context.tx_info.transaction;
+
+    memset(g_multisig_addr, 0, sizeof(g_multisig_addr));
+    if (0 > format_prefixed_hex(tx->multisig_meta.multisig_address,
+                                ADDRESS_LEN,
+                                g_multisig_addr,
+                                sizeof(g_multisig_addr))) {
+        return io_send_sw(SW_DISPLAY_ADDRESS_FAIL);
+    }
+
+    if (tx->multisig_meta.has_inner_entry_function) {
+        entry_function_payload_t *function = &tx->payload.entry_function;
+        char function_module_id_address_hex[67] = {0};
+
+        size_t leading_zeros =
+            count_leading_zeros(function->module_id.address, ADDRESS_LEN - 1);
+        if (0 > format_prefixed_hex(function->module_id.address + leading_zeros,
+                                    ADDRESS_LEN - leading_zeros,
+                                    function_module_id_address_hex,
+                                    sizeof(function_module_id_address_hex))) {
+            return io_send_sw(SW_DISPLAY_ADDRESS_FAIL);
+        }
+        memset(g_function, 0, sizeof(g_function));
+        snprintf(g_function,
+                 sizeof(g_function),
+                 "%s::%.*s::%.*s",
+                 function_module_id_address_hex,
+                 (int) function->module_id.name.len,
+                 function->module_id.name.bytes,
+                 (int) function->function_name.len,
+                 function->function_name.bytes);
+
+        switch (function->known_type) {
+            case FUNC_APTOS_ACCOUNT_TRANSFER:
+                memset(g_tx_type, 0, sizeof(g_tx_type));
+                snprintf(g_tx_type, sizeof(g_tx_type), "Multisig APT transfer");
+                return ui_prepare_tx_aptos_account_transfer();
+            case FUNC_COIN_TRANSFER:
+            case FUNC_APTOS_ACCOUNT_TRANSFER_COINS:
+                memset(g_tx_type, 0, sizeof(g_tx_type));
+                snprintf(g_tx_type, sizeof(g_tx_type), "Multisig coin transfer");
+                return ui_prepare_tx_coin_transfer();
+            case FUNC_FUNGIBLE_STORE_TRANSFER:
+                memset(g_tx_type, 0, sizeof(g_tx_type));
+                snprintf(g_tx_type, sizeof(g_tx_type), "Multisig FA transfer");
+                return ui_prepare_tx_fungible_asset_transfer();
+            case FUNC_ADD_STAKE:
+            case FUNC_UNLOCK_STAKE:
+            case FUNC_REACTIVATE_STAKE:
+            case FUNC_WITHDRAW_STAKE:
+                memset(g_tx_type, 0, sizeof(g_tx_type));
+                snprintf(g_tx_type, sizeof(g_tx_type), "Multisig delegation");
+                return ui_prepare_delegation_pool_transfer();
+            default:
+                memset(g_tx_type, 0, sizeof(g_tx_type));
+                snprintf(g_tx_type, sizeof(g_tx_type), "Multisig function call");
+                return ui_prepare_generic_entry_function();
+        }
+    } else {
+        memset(g_tx_type, 0, sizeof(g_tx_type));
+        snprintf(g_tx_type, sizeof(g_tx_type), "Multisig (no payload)");
+    }
 
     return UI_PREPARED;
 }

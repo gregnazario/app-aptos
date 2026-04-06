@@ -402,6 +402,207 @@ UX_FLOW(ux_display_tx_delegation_flow,
         &ux_display_approve_step,
         &ux_display_reject_step);
 
+// Generic arg display steps
+UX_STEP_NOCB(ux_display_arg1_step,
+             bnnn_paging,
+             {.title = g_arg_labels[0], .text = g_arg_values[0]});
+UX_STEP_NOCB(ux_display_arg2_step,
+             bnnn_paging,
+             {.title = g_arg_labels[1], .text = g_arg_values[1]});
+UX_STEP_NOCB(ux_display_arg3_step,
+             bnnn_paging,
+             {.title = g_arg_labels[2], .text = g_arg_values[2]});
+UX_STEP_NOCB(ux_display_arg4_step,
+             bnnn_paging,
+             {.title = g_arg_labels[3], .text = g_arg_values[3]});
+UX_STEP_NOCB(ux_display_arg5_step,
+             bnnn_paging,
+             {.title = g_arg_labels[4], .text = g_arg_values[4]});
+UX_STEP_NOCB(ux_display_arg6_step,
+             bnnn_paging,
+             {.title = g_arg_labels[5], .text = g_arg_values[5]});
+UX_STEP_NOCB(ux_display_extra_info_step,
+             bnnn_paging,
+             {.title = "Note", .text = g_extra_info});
+UX_STEP_NOCB(ux_display_multisig_addr_step,
+             bnnn_paging,
+             {.title = "Multisig", .text = g_multisig_addr});
+
+// Generic entry function flows with 0-6 args
+UX_FLOW(ux_display_generic_0_args_flow,
+        &ux_display_review_step,
+        &ux_display_tx_type_step,
+        &ux_display_function_step,
+        &ux_display_gas_fee_step,
+        &ux_display_approve_step,
+        &ux_display_reject_step);
+UX_FLOW(ux_display_generic_1_args_flow,
+        &ux_display_review_step,
+        &ux_display_tx_type_step,
+        &ux_display_function_step,
+        &ux_display_arg1_step,
+        &ux_display_gas_fee_step,
+        &ux_display_approve_step,
+        &ux_display_reject_step);
+UX_FLOW(ux_display_generic_2_args_flow,
+        &ux_display_review_step,
+        &ux_display_tx_type_step,
+        &ux_display_function_step,
+        &ux_display_arg1_step,
+        &ux_display_arg2_step,
+        &ux_display_gas_fee_step,
+        &ux_display_approve_step,
+        &ux_display_reject_step);
+UX_FLOW(ux_display_generic_3_args_flow,
+        &ux_display_review_step,
+        &ux_display_tx_type_step,
+        &ux_display_function_step,
+        &ux_display_arg1_step,
+        &ux_display_arg2_step,
+        &ux_display_arg3_step,
+        &ux_display_gas_fee_step,
+        &ux_display_approve_step,
+        &ux_display_reject_step);
+UX_FLOW(ux_display_generic_4_args_flow,
+        &ux_display_review_step,
+        &ux_display_tx_type_step,
+        &ux_display_function_step,
+        &ux_display_arg1_step,
+        &ux_display_arg2_step,
+        &ux_display_arg3_step,
+        &ux_display_arg4_step,
+        &ux_display_gas_fee_step,
+        &ux_display_approve_step,
+        &ux_display_reject_step);
+UX_FLOW(ux_display_generic_5_args_flow,
+        &ux_display_review_step,
+        &ux_display_tx_type_step,
+        &ux_display_function_step,
+        &ux_display_arg1_step,
+        &ux_display_arg2_step,
+        &ux_display_arg3_step,
+        &ux_display_arg4_step,
+        &ux_display_arg5_step,
+        &ux_display_gas_fee_step,
+        &ux_display_approve_step,
+        &ux_display_reject_step);
+UX_FLOW(ux_display_generic_6_args_flow,
+        &ux_display_review_step,
+        &ux_display_tx_type_step,
+        &ux_display_function_step,
+        &ux_display_arg1_step,
+        &ux_display_arg2_step,
+        &ux_display_arg3_step,
+        &ux_display_arg4_step,
+        &ux_display_arg5_step,
+        &ux_display_arg6_step,
+        &ux_display_gas_fee_step,
+        &ux_display_approve_step,
+        &ux_display_reject_step);
+
+// Script payload flows (no function name, just tx type + args)
+UX_FLOW(ux_display_script_0_args_flow,
+        &ux_display_review_step,
+        &ux_display_tx_type_step,
+        &ux_display_gas_fee_step,
+        &ux_display_approve_step,
+        &ux_display_reject_step);
+UX_FLOW(ux_display_script_1_args_flow,
+        &ux_display_review_step,
+        &ux_display_tx_type_step,
+        &ux_display_arg1_step,
+        &ux_display_gas_fee_step,
+        &ux_display_approve_step,
+        &ux_display_reject_step);
+UX_FLOW(ux_display_script_2_args_flow,
+        &ux_display_review_step,
+        &ux_display_tx_type_step,
+        &ux_display_arg1_step,
+        &ux_display_arg2_step,
+        &ux_display_gas_fee_step,
+        &ux_display_approve_step,
+        &ux_display_reject_step);
+UX_FLOW(ux_display_script_3_args_flow,
+        &ux_display_review_step,
+        &ux_display_tx_type_step,
+        &ux_display_arg1_step,
+        &ux_display_arg2_step,
+        &ux_display_arg3_step,
+        &ux_display_gas_fee_step,
+        &ux_display_approve_step,
+        &ux_display_reject_step);
+UX_FLOW(ux_display_script_4_args_flow,
+        &ux_display_review_step,
+        &ux_display_tx_type_step,
+        &ux_display_arg1_step,
+        &ux_display_arg2_step,
+        &ux_display_arg3_step,
+        &ux_display_arg4_step,
+        &ux_display_gas_fee_step,
+        &ux_display_approve_step,
+        &ux_display_reject_step);
+UX_FLOW(ux_display_script_5_args_flow,
+        &ux_display_review_step,
+        &ux_display_tx_type_step,
+        &ux_display_arg1_step,
+        &ux_display_arg2_step,
+        &ux_display_arg3_step,
+        &ux_display_arg4_step,
+        &ux_display_arg5_step,
+        &ux_display_gas_fee_step,
+        &ux_display_approve_step,
+        &ux_display_reject_step);
+UX_FLOW(ux_display_script_6_args_flow,
+        &ux_display_review_step,
+        &ux_display_tx_type_step,
+        &ux_display_arg1_step,
+        &ux_display_arg2_step,
+        &ux_display_arg3_step,
+        &ux_display_arg4_step,
+        &ux_display_arg5_step,
+        &ux_display_arg6_step,
+        &ux_display_gas_fee_step,
+        &ux_display_approve_step,
+        &ux_display_reject_step);
+
+static const ux_flow_step_t *const *get_generic_flow(int num_args) {
+    switch (num_args) {
+        case 0:
+            return ux_display_generic_0_args_flow;
+        case 1:
+            return ux_display_generic_1_args_flow;
+        case 2:
+            return ux_display_generic_2_args_flow;
+        case 3:
+            return ux_display_generic_3_args_flow;
+        case 4:
+            return ux_display_generic_4_args_flow;
+        case 5:
+            return ux_display_generic_5_args_flow;
+        default:
+            return ux_display_generic_6_args_flow;
+    }
+}
+
+static const ux_flow_step_t *const *get_script_flow(int num_args) {
+    switch (num_args) {
+        case 0:
+            return ux_display_script_0_args_flow;
+        case 1:
+            return ux_display_script_1_args_flow;
+        case 2:
+            return ux_display_script_2_args_flow;
+        case 3:
+            return ux_display_script_3_args_flow;
+        case 4:
+            return ux_display_script_4_args_flow;
+        case 5:
+            return ux_display_script_5_args_flow;
+        default:
+            return ux_display_script_6_args_flow;
+    }
+}
+
 int ui_display_transaction() {
     g_validate_callback = &ui_action_validate_transaction;
 
@@ -523,6 +724,50 @@ int ui_display_delegation_pool_transfer(entry_function_known_type_t function_typ
     const int ret = ui_prepare_delegation_pool_transfer();
     if (ret == UI_PREPARED) {
         ui_flow_display(ux_display_tx_delegation_flow);
+        return 0;
+    }
+
+    return ret;
+}
+
+int ui_display_generic_entry_function() {
+    const int ret = ui_prepare_generic_entry_function();
+    if (ret == UI_PREPARED) {
+        ui_flow_display(get_generic_flow(g_num_display_args));
+        return 0;
+    }
+
+    return ret;
+}
+
+int ui_display_script_payload() {
+    const int ret = ui_prepare_script_payload();
+    if (ret == UI_PREPARED) {
+        ui_flow_display(get_script_flow(g_num_display_args));
+        return 0;
+    }
+
+    return ret;
+}
+
+// Multisig no-payload flow: shows tx type + multisig address + gas
+UX_FLOW(ux_display_multisig_no_payload_flow,
+        &ux_display_review_step,
+        &ux_display_tx_type_step,
+        &ux_display_multisig_addr_step,
+        &ux_display_gas_fee_step,
+        &ux_display_approve_step,
+        &ux_display_reject_step);
+
+int ui_display_multisig_payload() {
+    const int ret = ui_prepare_multisig_payload();
+    if (ret == UI_PREPARED) {
+        transaction_t *tx = &G_context.tx_info.transaction;
+        if (tx->multisig_meta.has_inner_entry_function) {
+            ui_flow_display(get_generic_flow(g_num_display_args));
+        } else {
+            ui_flow_display(ux_display_multisig_no_payload_flow);
+        }
         return 0;
     }
 

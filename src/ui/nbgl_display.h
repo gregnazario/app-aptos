@@ -2,7 +2,7 @@
 
 #include "nbgl_use_case.h"
 
-extern nbgl_contentTagValue_t pairs[6];
+extern nbgl_contentTagValue_t pairs[12];
 extern nbgl_contentTagValueList_t pair_list;
 
 typedef struct use_case_review_ctx_s {

@@ -283,4 +283,172 @@ int ui_display_delegation_pool_transfer(entry_function_known_type_t function_typ
 
     return ret;
 }
+
+int ui_display_generic_entry_function() {
+    const int ret = ui_prepare_generic_entry_function();
+    if (ret == UI_PREPARED) {
+        int idx = 0;
+        pairs[idx].item = "Transaction type";
+        pairs[idx].value = g_tx_type;
+        idx++;
+        pairs[idx].item = "Function";
+        pairs[idx].value = g_function;
+        idx++;
+
+        for (int i = 0; i < g_num_display_args; i++) {
+            pairs[idx].item = g_arg_labels[i];
+            pairs[idx].value = g_arg_values[i];
+            idx++;
+        }
+
+        if (g_extra_info[0] != '\0') {
+            pairs[idx].item = "Note";
+            pairs[idx].value = g_extra_info;
+            idx++;
+        }
+
+        pairs[idx].item = "Gas fee";
+        pairs[idx].value = g_gas_fee;
+        idx++;
+
+        pair_list.nbMaxLinesForValue = 0;
+        pair_list.nbPairs = idx;
+        pair_list.pairs = pairs;
+
+        nbgl_useCaseReview(TYPE_TRANSACTION,
+                           &pair_list,
+                           &ICON_APP_HOME,
+                           "Review transaction",
+                           NULL,
+                           "Sign transaction?",
+                           review_choice);
+        return 0;
+    }
+
+    return ret;
+}
+
+int ui_display_script_payload() {
+    const int ret = ui_prepare_script_payload();
+    if (ret == UI_PREPARED) {
+        int idx = 0;
+        pairs[idx].item = "Transaction type";
+        pairs[idx].value = g_tx_type;
+        idx++;
+
+        for (int i = 0; i < g_num_display_args; i++) {
+            pairs[idx].item = g_arg_labels[i];
+            pairs[idx].value = g_arg_values[i];
+            idx++;
+        }
+
+        if (g_extra_info[0] != '\0') {
+            pairs[idx].item = "Note";
+            pairs[idx].value = g_extra_info;
+            idx++;
+        }
+
+        pairs[idx].item = "Gas fee";
+        pairs[idx].value = g_gas_fee;
+        idx++;
+
+        pair_list.nbMaxLinesForValue = 0;
+        pair_list.nbPairs = idx;
+        pair_list.pairs = pairs;
+
+        nbgl_useCaseReview(TYPE_TRANSACTION,
+                           &pair_list,
+                           &ICON_APP_HOME,
+                           "Review script execution",
+                           NULL,
+                           "Sign transaction?",
+                           review_choice);
+        return 0;
+    }
+
+    return ret;
+}
+
+int ui_display_multisig_payload() {
+    const int ret = ui_prepare_multisig_payload();
+    if (ret == UI_PREPARED) {
+        int idx = 0;
+        pairs[idx].item = "Transaction type";
+        pairs[idx].value = g_tx_type;
+        idx++;
+        pairs[idx].item = "Multisig";
+        pairs[idx].value = g_multisig_addr;
+        idx++;
+
+        transaction_t *tx = &G_context.tx_info.transaction;
+        if (tx->multisig_meta.has_inner_entry_function) {
+            pairs[idx].item = "Function";
+            pairs[idx].value = g_function;
+            idx++;
+
+            entry_function_payload_t *function = &tx->payload.entry_function;
+            if (function->known_type == FUNC_UNKNOWN) {
+                for (int i = 0; i < g_num_display_args; i++) {
+                    pairs[idx].item = g_arg_labels[i];
+                    pairs[idx].value = g_arg_values[i];
+                    idx++;
+                }
+            } else if (function->known_type == FUNC_APTOS_ACCOUNT_TRANSFER) {
+                pairs[idx].item = "Receiver";
+                pairs[idx].value = g_address;
+                idx++;
+                pairs[idx].item = "Amount";
+                pairs[idx].value = g_amount;
+                idx++;
+            } else if (function->known_type == FUNC_COIN_TRANSFER ||
+                       function->known_type == FUNC_APTOS_ACCOUNT_TRANSFER_COINS ||
+                       function->known_type == FUNC_FUNGIBLE_STORE_TRANSFER) {
+                if (!g_is_token_listed) {
+                    pairs[idx].item = "Coin Type";
+                    pairs[idx].value = g_struct;
+                    idx++;
+                }
+                pairs[idx].item = "Amount";
+                pairs[idx].value = g_amount;
+                idx++;
+                pairs[idx].item = "To";
+                pairs[idx].value = g_address;
+                idx++;
+            } else {
+                // Delegation pool operations
+                pairs[idx].item = "Amount";
+                pairs[idx].value = g_amount;
+                idx++;
+                pairs[idx].item = "Validator";
+                pairs[idx].value = g_address;
+                idx++;
+            }
+        }
+
+        if (g_extra_info[0] != '\0') {
+            pairs[idx].item = "Note";
+            pairs[idx].value = g_extra_info;
+            idx++;
+        }
+
+        pairs[idx].item = "Gas fee";
+        pairs[idx].value = g_gas_fee;
+        idx++;
+
+        pair_list.nbMaxLinesForValue = 0;
+        pair_list.nbPairs = idx;
+        pair_list.pairs = pairs;
+
+        nbgl_useCaseReview(TYPE_TRANSACTION,
+                           &pair_list,
+                           &ICON_APP_HOME,
+                           "Review multisig transaction",
+                           NULL,
+                           "Sign transaction?",
+                           review_choice);
+        return 0;
+    }
+
+    return ret;
+}
 #endif
