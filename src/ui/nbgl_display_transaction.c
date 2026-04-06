@@ -20,16 +20,15 @@
 #include <stdbool.h>  // bool
 #include <string.h>   // memset
 
-#include "os.h"
-#include "glyphs.h"
-#include "nbgl_use_case.h"
-
-#include "nbgl_display.h"
-#include "display.h"
-#include "menu.h"
-#include "constants.h"
 #include "../globals.h"
 #include "action/validate.h"
+#include "constants.h"
+#include "display.h"
+#include "glyphs.h"
+#include "menu.h"
+#include "nbgl_display.h"
+#include "nbgl_use_case.h"
+#include "os.h"
 
 static void review_choice(bool confirm) {
     if (confirm) {
@@ -53,14 +52,9 @@ int ui_display_transaction() {
         pair_list.nbPairs = 2;
         pair_list.pairs = pairs;
 
-        nbgl_useCaseReviewVerify(TYPE_TRANSACTION,
-                                 &pair_list,
-                                 &ICON_APP_HOME,
-                                 "Review transaction",
-                                 NULL,
-                                 "Sign transaction?",
-                                 NULL,
-                                 review_choice);
+        nbgl_useCaseReviewVerify(TYPE_TRANSACTION, &pair_list, &ICON_APP_HOME,
+                                 "Review transaction", NULL,
+                                 "Sign transaction?", NULL, review_choice);
         return 0;
     }
 
@@ -81,14 +75,9 @@ int ui_display_entry_function() {
         pair_list.nbPairs = 3;
         pair_list.pairs = pairs;
 
-        nbgl_useCaseReviewVerify(TYPE_TRANSACTION,
-                                 &pair_list,
-                                 &ICON_APP_HOME,
-                                 "Review transaction",
-                                 NULL,
-                                 "Sign transaction?",
-                                 NULL,
-                                 review_choice);
+        nbgl_useCaseReviewVerify(TYPE_TRANSACTION, &pair_list, &ICON_APP_HOME,
+                                 "Review transaction", NULL,
+                                 "Sign transaction?", NULL, review_choice);
         return 0;
     }
 
@@ -113,13 +102,9 @@ int ui_display_tx_aptos_account_transfer() {
         pair_list.nbPairs = 5;
         pair_list.pairs = pairs;
 
-        nbgl_useCaseReview(TYPE_TRANSACTION,
-                           &pair_list,
-                           &ICON_APP_HOME,
-                           "Review transaction to send Aptos",
-                           NULL,
-                           "Sign transaction?",
-                           review_choice);
+        nbgl_useCaseReview(TYPE_TRANSACTION, &pair_list, &ICON_APP_HOME,
+                           "Review transaction to send Aptos", NULL,
+                           "Sign transaction?", review_choice);
         return 0;
     }
 
@@ -142,13 +127,9 @@ void ui_listed_coin_transfer_flow_display() {
     pair_list.nbPairs = 5;
     pair_list.pairs = pairs;
 
-    nbgl_useCaseReview(TYPE_TRANSACTION,
-                       &pair_list,
-                       &ICON_APP_HOME,
-                       "Review transaction to transfer coins",
-                       NULL,
-                       "Sign transaction to transfer coins?",
-                       review_choice);
+    nbgl_useCaseReview(TYPE_TRANSACTION, &pair_list, &ICON_APP_HOME,
+                       "Review transaction to transfer coins", NULL,
+                       "Sign transaction to transfer coins?", review_choice);
 }
 
 void ui_unlisted_coin_transfer_flow_display() {
@@ -169,13 +150,9 @@ void ui_unlisted_coin_transfer_flow_display() {
     pair_list.nbPairs = 6;
     pair_list.pairs = pairs;
 
-    nbgl_useCaseReview(TYPE_TRANSACTION,
-                       &pair_list,
-                       &ICON_APP_HOME,
-                       "Review transaction to transfer coins",
-                       NULL,
-                       "Sign transaction to transfer coins?",
-                       review_choice);
+    nbgl_useCaseReview(TYPE_TRANSACTION, &pair_list, &ICON_APP_HOME,
+                       "Review transaction to transfer coins", NULL,
+                       "Sign transaction to transfer coins?", review_choice);
 }
 
 int ui_display_tx_coin_transfer() {
@@ -206,7 +183,8 @@ int ui_display_tx_fungible_asset_transfer() {
     return ret;
 }
 
-static const char* get_delegation_title(entry_function_known_type_t function_type) {
+static const char* get_delegation_title(
+    entry_function_known_type_t function_type) {
     switch (function_type) {
         case FUNC_ADD_STAKE:
             return "Review transaction to delegate APT";
@@ -221,7 +199,8 @@ static const char* get_delegation_title(entry_function_known_type_t function_typ
     }
 }
 
-static const char* get_delegation_sign_review(entry_function_known_type_t function_type) {
+static const char* get_delegation_sign_review(
+    entry_function_known_type_t function_type) {
     switch (function_type) {
         case FUNC_ADD_STAKE:
             return "Sign transaction to delegate APT?";
@@ -236,7 +215,8 @@ static const char* get_delegation_sign_review(entry_function_known_type_t functi
     }
 }
 
-void ui_delegation_pool_flow_display(entry_function_known_type_t function_type) {
+void ui_delegation_pool_flow_display(
+    entry_function_known_type_t function_type) {
     PRINTF("ui_delegation_pool_flow_display");
     switch (function_type) {
         case FUNC_ADD_STAKE:
@@ -265,16 +245,14 @@ void ui_delegation_pool_flow_display(entry_function_known_type_t function_type) 
     pair_list.nbPairs = 3;
     pair_list.pairs = pairs;
 
-    nbgl_useCaseReview(TYPE_TRANSACTION,
-                       &pair_list,
-                       &ICON_APP_HOME,
-                       get_delegation_title(function_type),
-                       NULL,
+    nbgl_useCaseReview(TYPE_TRANSACTION, &pair_list, &ICON_APP_HOME,
+                       get_delegation_title(function_type), NULL,
                        get_delegation_sign_review(function_type),
                        review_choice);
 }
 
-int ui_display_delegation_pool_transfer(entry_function_known_type_t function_type) {
+int ui_display_delegation_pool_transfer(
+    entry_function_known_type_t function_type) {
     const int ret = ui_prepare_delegation_pool_transfer();
     if (ret == UI_PREPARED) {
         ui_delegation_pool_flow_display(function_type);
@@ -315,12 +293,8 @@ int ui_display_generic_entry_function() {
         pair_list.nbPairs = idx;
         pair_list.pairs = pairs;
 
-        nbgl_useCaseReview(TYPE_TRANSACTION,
-                           &pair_list,
-                           &ICON_APP_HOME,
-                           "Review transaction",
-                           NULL,
-                           "Sign transaction?",
+        nbgl_useCaseReview(TYPE_TRANSACTION, &pair_list, &ICON_APP_HOME,
+                           "Review transaction", NULL, "Sign transaction?",
                            review_choice);
         return 0;
     }
@@ -356,12 +330,8 @@ int ui_display_script_payload() {
         pair_list.nbPairs = idx;
         pair_list.pairs = pairs;
 
-        nbgl_useCaseReview(TYPE_TRANSACTION,
-                           &pair_list,
-                           &ICON_APP_HOME,
-                           "Review script execution",
-                           NULL,
-                           "Sign transaction?",
+        nbgl_useCaseReview(TYPE_TRANSACTION, &pair_list, &ICON_APP_HOME,
+                           "Review script execution", NULL, "Sign transaction?",
                            review_choice);
         return 0;
     }
@@ -380,13 +350,13 @@ int ui_display_multisig_payload() {
         pairs[idx].value = g_multisig_addr;
         idx++;
 
-        transaction_t *tx = &G_context.tx_info.transaction;
+        transaction_t* tx = &G_context.tx_info.transaction;
         if (tx->multisig_meta.has_inner_entry_function) {
             pairs[idx].item = "Function";
             pairs[idx].value = g_function;
             idx++;
 
-            entry_function_payload_t *function = &tx->payload.entry_function;
+            entry_function_payload_t* function = &tx->payload.entry_function;
             if (function->known_type == FUNC_UNKNOWN) {
                 for (int i = 0; i < g_num_display_args; i++) {
                     pairs[idx].item = g_arg_labels[i];
@@ -401,7 +371,8 @@ int ui_display_multisig_payload() {
                 pairs[idx].value = g_amount;
                 idx++;
             } else if (function->known_type == FUNC_COIN_TRANSFER ||
-                       function->known_type == FUNC_APTOS_ACCOUNT_TRANSFER_COINS ||
+                       function->known_type ==
+                           FUNC_APTOS_ACCOUNT_TRANSFER_COINS ||
                        function->known_type == FUNC_FUNGIBLE_STORE_TRANSFER) {
                 if (!g_is_token_listed) {
                     pairs[idx].item = "Coin Type";
@@ -439,13 +410,9 @@ int ui_display_multisig_payload() {
         pair_list.nbPairs = idx;
         pair_list.pairs = pairs;
 
-        nbgl_useCaseReview(TYPE_TRANSACTION,
-                           &pair_list,
-                           &ICON_APP_HOME,
-                           "Review multisig transaction",
-                           NULL,
-                           "Sign transaction?",
-                           review_choice);
+        nbgl_useCaseReview(TYPE_TRANSACTION, &pair_list, &ICON_APP_HOME,
+                           "Review multisig transaction", NULL,
+                           "Sign transaction?", review_choice);
         return 0;
     }
 
@@ -486,13 +453,9 @@ int ui_display_multisig_create_transaction() {
         pair_list.nbPairs = idx;
         pair_list.pairs = pairs;
 
-        nbgl_useCaseReview(TYPE_TRANSACTION,
-                           &pair_list,
-                           &ICON_APP_HOME,
-                           "Review multisig proposal",
-                           NULL,
-                           "Sign transaction?",
-                           review_choice);
+        nbgl_useCaseReview(TYPE_TRANSACTION, &pair_list, &ICON_APP_HOME,
+                           "Review multisig proposal", NULL,
+                           "Sign transaction?", review_choice);
         return 0;
     }
 
@@ -520,13 +483,9 @@ int ui_display_multisig_create_hash() {
         pair_list.nbPairs = idx;
         pair_list.pairs = pairs;
 
-        nbgl_useCaseReview(TYPE_TRANSACTION,
-                           &pair_list,
-                           &ICON_APP_HOME,
-                           "Review multisig proposal",
-                           NULL,
-                           "Sign transaction?",
-                           review_choice);
+        nbgl_useCaseReview(TYPE_TRANSACTION, &pair_list, &ICON_APP_HOME,
+                           "Review multisig proposal", NULL,
+                           "Sign transaction?", review_choice);
         return 0;
     }
 
@@ -554,12 +513,8 @@ int ui_display_multisig_vote() {
         pair_list.nbPairs = idx;
         pair_list.pairs = pairs;
 
-        nbgl_useCaseReview(TYPE_TRANSACTION,
-                           &pair_list,
-                           &ICON_APP_HOME,
-                           "Review multisig vote",
-                           NULL,
-                           "Sign transaction?",
+        nbgl_useCaseReview(TYPE_TRANSACTION, &pair_list, &ICON_APP_HOME,
+                           "Review multisig vote", NULL, "Sign transaction?",
                            review_choice);
         return 0;
     }
@@ -598,13 +553,9 @@ int ui_display_multisig_create_with_owners() {
         pair_list.nbPairs = idx;
         pair_list.pairs = pairs;
 
-        nbgl_useCaseReview(TYPE_TRANSACTION,
-                           &pair_list,
-                           &ICON_APP_HOME,
-                           "Review multisig creation",
-                           NULL,
-                           "Sign transaction?",
-                           review_choice);
+        nbgl_useCaseReview(TYPE_TRANSACTION, &pair_list, &ICON_APP_HOME,
+                           "Review multisig creation", NULL,
+                           "Sign transaction?", review_choice);
         return 0;
     }
 

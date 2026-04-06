@@ -1,0 +1,145 @@
+# Makefile.quality - Code quality targets for local and CI use
+#
+# These targets do NOT require BOLOS_SDK and can run on the host or in Docker.
+# Usage:
+#   make -f Makefile.quality format       # Auto-format C code
+#   make -f Makefile.quality format-check # Check formatting (CI)
+#   make -f Makefile.quality lint         # Static analysis with cppcheck
+#   make -f Makefile.quality test         # Build and run unit tests
+#   make -f Makefile.quality coverage     # Run tests with coverage report
+#   make -f Makefile.quality sanitize     # Run tests with ASan + UBSan
+#   make -f Makefile.quality all          # Run format-check + lint + sanitize
+
+.PHONY: all format format-check lint test coverage sanitize clean-test
+
+# Source files
+SRC_FILES := $(wildcard src/**/*.c src/**/*.h src/*.c src/*.h)
+SRC_C_FILES := $(wildcard src/**/*.c src/*.c)
+
+# clang-format version should be 11+ (matching CI)
+CLANG_FORMAT ?= clang-format
+
+########################################
+#            Formatting                #
+########################################
+
+format:
+	@echo "=== Formatting source files ==="
+	$(CLANG_FORMAT) -i $(SRC_FILES)
+	@echo "Done."
+
+format-check:
+	@echo "=== Checking code format ==="
+	@$(CLANG_FORMAT) --dry-run --Werror $(SRC_FILES) && \
+		echo "Format OK" || \
+		(echo "Format check failed. Run: make -f Makefile.quality format" && exit 1)
+
+########################################
+#          Static Analysis             #
+########################################
+
+# cppcheck flags:
+#   --enable=all: enable all checks (style, performance, portability, information)
+#   --suppress=missingInclude: BOLOS SDK headers are not available outside Docker
+#   --suppress=unusedFunction: many functions are called from SDK framework
+#   --error-exitcode=1: fail on errors
+#   --inline-suppr: allow inline suppressions in source
+CPPCHECK ?= cppcheck
+CPPCHECK_FLAGS := \
+	--enable=warning,style,performance,portability \
+	--suppress=missingIncludeSystem \
+	--suppress=missingInclude \
+	--suppress=unusedFunction \
+	--error-exitcode=1 \
+	--inline-suppr \
+	--std=c11 \
+	-I src \
+	--force
+
+lint:
+	@echo "=== Running cppcheck static analysis ==="
+	$(CPPCHECK) $(CPPCHECK_FLAGS) $(SRC_C_FILES)
+	@echo "Static analysis passed."
+
+########################################
+#            Unit Tests                #
+########################################
+
+# These targets require BOLOS_SDK to be set (for SDK headers)
+TEST_BUILD_DIR := unit-tests/build
+
+test: $(TEST_BUILD_DIR)/Makefile
+	@echo "=== Running unit tests ==="
+	$(MAKE) -C $(TEST_BUILD_DIR) --no-print-directory
+	CTEST_OUTPUT_ON_FAILURE=1 $(MAKE) -C $(TEST_BUILD_DIR) test --no-print-directory
+
+$(TEST_BUILD_DIR)/Makefile:
+	@mkdir -p $(TEST_BUILD_DIR)
+	cd unit-tests && cmake -Bbuild -H.
+
+########################################
+#            Coverage                  #
+########################################
+
+coverage: test
+	@echo "=== Generating coverage report ==="
+	lcov --directory unit-tests -b $(TEST_BUILD_DIR) \
+		--capture --initial -o unit-tests/coverage.base \
+		--rc lcov_branch_coverage=1 2>/dev/null
+	lcov --rc lcov_branch_coverage=1 \
+		--directory unit-tests -b $(TEST_BUILD_DIR) \
+		--capture -o unit-tests/coverage.capture 2>/dev/null
+	lcov --directory unit-tests -b $(TEST_BUILD_DIR) \
+		--add-tracefile unit-tests/coverage.base \
+		--add-tracefile unit-tests/coverage.capture \
+		-o unit-tests/coverage.info \
+		--rc lcov_branch_coverage=1 2>/dev/null
+	lcov --directory unit-tests -b $(TEST_BUILD_DIR) \
+		--remove unit-tests/coverage.info '*/unit-tests/*' \
+		-o unit-tests/coverage.info \
+		--rc lcov_branch_coverage=1 2>/dev/null
+	@echo ""
+	@echo "=== Coverage Summary ==="
+	@lcov --summary unit-tests/coverage.info --rc lcov_branch_coverage=1 2>&1
+	@echo ""
+	@echo "=== Per-file Coverage ==="
+	@lcov --list unit-tests/coverage.info --rc lcov_branch_coverage=1 2>&1 | \
+		grep -E "Filename|deserialize|decoder|init|utils|Total"
+	@echo ""
+	@echo "HTML report: genhtml unit-tests/coverage.info -o unit-tests/coverage"
+
+########################################
+#         Sanitized Tests              #
+########################################
+
+# Build and run unit tests with Address Sanitizer and Undefined Behavior Sanitizer
+SANITIZE_BUILD_DIR := unit-tests/build-sanitize
+
+sanitize:
+	@echo "=== Building tests with ASan + UBSan ==="
+	@mkdir -p $(SANITIZE_BUILD_DIR)
+	cd unit-tests && cmake -B build-sanitize -H. \
+		-DCMAKE_C_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer -g -O1" \
+		-DCMAKE_EXE_LINKER_FLAGS="-fsanitize=address,undefined" \
+		-DCMAKE_SHARED_LINKER_FLAGS="-fsanitize=address,undefined"
+	$(MAKE) -C $(SANITIZE_BUILD_DIR) --no-print-directory
+	@echo "=== Running tests under sanitizers ==="
+	CTEST_OUTPUT_ON_FAILURE=1 $(MAKE) -C $(SANITIZE_BUILD_DIR) test --no-print-directory
+	@echo "Sanitizer tests passed — no memory errors or undefined behavior detected."
+
+########################################
+#              Clean                   #
+########################################
+
+clean-test:
+	rm -rf $(TEST_BUILD_DIR) $(SANITIZE_BUILD_DIR)
+	rm -f unit-tests/coverage.base unit-tests/coverage.capture unit-tests/coverage.info
+	rm -rf unit-tests/coverage
+
+########################################
+#           All Quality Checks         #
+########################################
+
+all: format-check lint sanitize
+	@echo ""
+	@echo "=== All quality checks passed ==="

@@ -1,22 +1,23 @@
+#include "deserialize.h"
+
 #include <string.h>
 
-#include "buffer.h"
-
-#include "deserialize.h"
-#include "utils.h"
-#include "types.h"
-#include "../constants.h"
-#include "../bcs/init.h"
 #include "../bcs/decoder.h"
+#include "../bcs/init.h"
+#include "../constants.h"
+#include "buffer.h"
+#include "types.h"
+#include "utils.h"
 
 // Forward declarations for functions defined later in this file
-static parser_status_e skip_type_tag(buffer_t *buf, uint8_t depth);
-static parser_status_e skip_all_type_args(buffer_t *buf);
+static parser_status_e skip_type_tag(buffer_t* buf, uint8_t depth);
+static parser_status_e skip_all_type_args(buffer_t* buf);
 static generic_arg_type_t infer_arg_type(uint32_t len);
-parser_status_e multisig_vote_deserialize(buffer_t *buf, transaction_t *tx);
-parser_status_e multisig_create_with_owners_deserialize(buffer_t *buf, transaction_t *tx);
+parser_status_e multisig_vote_deserialize(buffer_t* buf, transaction_t* tx);
+parser_status_e multisig_create_with_owners_deserialize(buffer_t* buf,
+                                                        transaction_t* tx);
 
-parser_status_e transaction_deserialize(buffer_t *buf, transaction_t *tx) {
+parser_status_e transaction_deserialize(buffer_t* buf, transaction_t* tx) {
     if (buf->size > MAX_TRANSACTION_LEN) {
         return WRONG_LENGTH_ERROR;
     }
@@ -32,11 +33,13 @@ parser_status_e transaction_deserialize(buffer_t *buf, transaction_t *tx) {
         case TX_RAW_WITH_DATA:
             break;
         case TX_RAW_MESSAGE:
-            break;  // Since the raw message is processed before display without direct transaction
-                    // buffer reads, null-termination concerns are mitigated.
+            break;  // Since the raw message is processed before display without
+                    // direct transaction buffer reads, null-termination
+                    // concerns are mitigated.
         case TX_MESSAGE:
             // To make sure the message is a null-terminated string
-            if (buf->size == MAX_TRANSACTION_LEN && buf->ptr[MAX_TRANSACTION_LEN - 1] != 0) {
+            if (buf->size == MAX_TRANSACTION_LEN &&
+                buf->ptr[MAX_TRANSACTION_LEN - 1] != 0) {
                 return WRONG_LENGTH_ERROR;
             }
 
@@ -48,13 +51,13 @@ parser_status_e transaction_deserialize(buffer_t *buf, transaction_t *tx) {
     return PARSING_OK;
 }
 
-parser_status_e tx_raw_deserialize(buffer_t *buf, transaction_t *tx) {
+parser_status_e tx_raw_deserialize(buffer_t* buf, transaction_t* tx) {
     if (tx->tx_variant != TX_RAW) {
         return TX_VARIANT_UNDEFINED_ERROR;
     }
 
     // read sender address
-    if (!bcs_read_fixed_bytes(buf, (uint8_t *) &tx->sender, ADDRESS_LEN)) {
+    if (!bcs_read_fixed_bytes(buf, (uint8_t*)&tx->sender, ADDRESS_LEN)) {
         return SENDER_READ_ERROR;
     }
     // read sequence
@@ -63,7 +66,8 @@ parser_status_e tx_raw_deserialize(buffer_t *buf, transaction_t *tx) {
     }
 
     const size_t buf_footer_begin = buf->size - TX_FOOTER_LEN;
-    buffer_t buf_footer = {.ptr = buf->ptr, .size = buf->size, .offset = buf_footer_begin};
+    buffer_t buf_footer = {
+        .ptr = buf->ptr, .size = buf->size, .offset = buf_footer_begin};
     // read max_gas_amount
     if (!bcs_read_u64(&buf_footer, &tx->max_gas_amount)) {
         return MAX_GAS_READ_ERROR;
@@ -86,7 +90,8 @@ parser_status_e tx_raw_deserialize(buffer_t *buf, transaction_t *tx) {
     if (!bcs_read_u32_from_uleb128(buf, &payload_variant)) {
         return PAYLOAD_VARIANT_READ_ERROR;
     }
-    if (payload_variant != PAYLOAD_ENTRY_FUNCTION && payload_variant != PAYLOAD_SCRIPT &&
+    if (payload_variant != PAYLOAD_ENTRY_FUNCTION &&
+        payload_variant != PAYLOAD_SCRIPT &&
         payload_variant != PAYLOAD_MULTISIG) {
         return PAYLOAD_UNDEFINED_ERROR;
     }
@@ -95,12 +100,15 @@ parser_status_e tx_raw_deserialize(buffer_t *buf, transaction_t *tx) {
     parser_status_e payload_parsing_status = 0;
     switch (tx->payload_variant) {
         case PAYLOAD_ENTRY_FUNCTION:
-            payload_parsing_status = entry_function_payload_deserialize(buf, tx);
+            payload_parsing_status =
+                entry_function_payload_deserialize(buf, tx);
             if (payload_parsing_status != PARSING_OK) {
                 return payload_parsing_status;
             }
-            if (tx->payload.entry_function.known_type == FUNC_APTOS_ACCOUNT_TRANSFER) {
-                return (buf->offset == buf_footer_begin) ? PARSING_OK : WRONG_LENGTH_ERROR;
+            if (tx->payload.entry_function.known_type ==
+                FUNC_APTOS_ACCOUNT_TRANSFER) {
+                return (buf->offset == buf_footer_begin) ? PARSING_OK
+                                                         : WRONG_LENGTH_ERROR;
             }
             return PARSING_OK;
         case PAYLOAD_SCRIPT:
@@ -114,17 +122,18 @@ parser_status_e tx_raw_deserialize(buffer_t *buf, transaction_t *tx) {
     return PARSING_OK;
 }
 
-parser_status_e tx_variant_deserialize(buffer_t *buf, transaction_t *tx) {
+parser_status_e tx_variant_deserialize(buffer_t* buf, transaction_t* tx) {
     if (buf->offset != 0) {
         return TX_VARIANT_READ_ERROR;
     }
 
     tx->tx_variant = TX_UNDEFINED;
 
-    uint8_t *prefix;
+    uint8_t* prefix;
     // read hashed prefix bytes
     if (bcs_read_ptr_to_fixed_bytes(buf, &prefix, TX_HASHED_PREFIX_LEN)) {
-        if (memcmp(prefix, PREFIX_RAW_TX_WITH_DATA_HASHED, TX_HASHED_PREFIX_LEN) == 0) {
+        if (memcmp(prefix, PREFIX_RAW_TX_WITH_DATA_HASHED,
+                   TX_HASHED_PREFIX_LEN) == 0) {
             tx->tx_variant = TX_RAW_WITH_DATA;
             return PARSING_OK;
         }
@@ -135,46 +144,48 @@ parser_status_e tx_variant_deserialize(buffer_t *buf, transaction_t *tx) {
         }
     }
 
-    // Not a transaction prefix, so we reset the offer to consider the full message
+    // Not a transaction prefix, so we reset the offer to consider the full
+    // message
     buf->offset = 0;
 
     // Try to display the message as UTF8 if possible
-    tx->tx_variant =
-        transaction_utils_check_encoding(buf->ptr, buf->size) ? TX_MESSAGE : TX_RAW_MESSAGE;
+    tx->tx_variant = transaction_utils_check_encoding(buf->ptr, buf->size)
+                         ? TX_MESSAGE
+                         : TX_RAW_MESSAGE;
 
     return PARSING_OK;
 }
 
-parser_status_e entry_function_payload_deserialize(buffer_t *buf, transaction_t *tx) {
+parser_status_e entry_function_payload_deserialize(buffer_t* buf,
+                                                   transaction_t* tx) {
     if (tx->payload_variant != PAYLOAD_ENTRY_FUNCTION) {
         return PAYLOAD_UNDEFINED_ERROR;
     }
-    entry_function_payload_t *payload = &tx->payload.entry_function;
+    entry_function_payload_t* payload = &tx->payload.entry_function;
     entry_function_payload_init(payload);
 
     // read module id address field
-    if (!bcs_read_fixed_bytes(buf,
-                              (uint8_t *) payload->module_id.address,
+    if (!bcs_read_fixed_bytes(buf, (uint8_t*)payload->module_id.address,
                               sizeof payload->module_id.address)) {
         return MODULE_ID_ADDR_READ_ERROR;
     }
     // read module_id name len field
-    if (!bcs_read_u32_from_uleb128(buf, (uint32_t *) &payload->module_id.name.len)) {
+    if (!bcs_read_u32_from_uleb128(buf,
+                                   (uint32_t*)&payload->module_id.name.len)) {
         return MODULE_ID_NAME_LEN_READ_ERROR;
     }
     //  read module_id name bytes field
-    if (!bcs_read_ptr_to_fixed_bytes(buf,
-                                     &payload->module_id.name.bytes,
+    if (!bcs_read_ptr_to_fixed_bytes(buf, &payload->module_id.name.bytes,
                                      payload->module_id.name.len)) {
         return MODULE_ID_NAME_BYTES_READ_ERROR;
     }
     // read function_name len field
-    if (!bcs_read_u32_from_uleb128(buf, (uint32_t *) &payload->function_name.len)) {
+    if (!bcs_read_u32_from_uleb128(buf,
+                                   (uint32_t*)&payload->function_name.len)) {
         return FUNCTION_NAME_LEN_READ_ERROR;
     }
     // read function_name bytes field
-    if (!bcs_read_ptr_to_fixed_bytes(buf,
-                                     &payload->function_name.bytes,
+    if (!bcs_read_ptr_to_fixed_bytes(buf, &payload->function_name.bytes,
                                      payload->function_name.len)) {
         return FUNCTION_NAME_BYTES_READ_ERROR;
     }
@@ -210,24 +221,25 @@ parser_status_e entry_function_payload_deserialize(buffer_t *buf, transaction_t 
     return PARSING_OK;
 }
 
-parser_status_e aptos_account_transfer_function_deserialize(buffer_t *buf, transaction_t *tx) {
+parser_status_e aptos_account_transfer_function_deserialize(buffer_t* buf,
+                                                            transaction_t* tx) {
     if (tx->payload_variant != PAYLOAD_ENTRY_FUNCTION) {
         return PAYLOAD_UNDEFINED_ERROR;
     }
-    entry_function_payload_t *payload = &tx->payload.entry_function;
+    entry_function_payload_t* payload = &tx->payload.entry_function;
     if (payload->known_type != FUNC_APTOS_ACCOUNT_TRANSFER) {
         return PAYLOAD_UNDEFINED_ERROR;
     }
 
     // read type args size
-    if (!bcs_read_u32_from_uleb128(buf, (uint32_t *) &payload->args.ty_size)) {
+    if (!bcs_read_u32_from_uleb128(buf, (uint32_t*)&payload->args.ty_size)) {
         return TYPE_ARGS_SIZE_READ_ERROR;
     }
     if (payload->args.ty_size != 0) {
         return TYPE_ARGS_SIZE_UNEXPECTED_ERROR;
     }
     // read args size
-    if (!bcs_read_u32_from_uleb128(buf, (uint32_t *) &payload->args.args_size)) {
+    if (!bcs_read_u32_from_uleb128(buf, (uint32_t*)&payload->args.args_size)) {
         return ARGS_SIZE_READ_ERROR;
     }
     if (payload->args.args_size != 2) {
@@ -242,7 +254,8 @@ parser_status_e aptos_account_transfer_function_deserialize(buffer_t *buf, trans
         return WRONG_ADDRESS_LEN_ERROR;
     }
     // read receiver address field
-    if (!bcs_read_fixed_bytes(buf, (uint8_t *) &payload->args.transfer.receiver, ADDRESS_LEN)) {
+    if (!bcs_read_fixed_bytes(buf, (uint8_t*)&payload->args.transfer.receiver,
+                              ADDRESS_LEN)) {
         return RECEIVER_ADDR_READ_ERROR;
     }
     uint32_t amount_len;
@@ -261,18 +274,19 @@ parser_status_e aptos_account_transfer_function_deserialize(buffer_t *buf, trans
     return PARSING_OK;
 }
 
-parser_status_e coin_transfer_function_deserialize(buffer_t *buf, transaction_t *tx) {
+parser_status_e coin_transfer_function_deserialize(buffer_t* buf,
+                                                   transaction_t* tx) {
     if (tx->payload_variant != PAYLOAD_ENTRY_FUNCTION) {
         return PAYLOAD_UNDEFINED_ERROR;
     }
-    entry_function_payload_t *payload = &tx->payload.entry_function;
+    entry_function_payload_t* payload = &tx->payload.entry_function;
     if (payload->known_type != FUNC_COIN_TRANSFER &&
         payload->known_type != FUNC_APTOS_ACCOUNT_TRANSFER_COINS) {
         return PAYLOAD_UNDEFINED_ERROR;
     }
 
     // read type args size field
-    if (!bcs_read_u32_from_uleb128(buf, (uint32_t *) &payload->args.ty_size)) {
+    if (!bcs_read_u32_from_uleb128(buf, (uint32_t*)&payload->args.ty_size)) {
         return TYPE_ARGS_SIZE_READ_ERROR;
     }
     if (payload->args.ty_size != 1) {
@@ -288,13 +302,15 @@ parser_status_e coin_transfer_function_deserialize(buffer_t *buf, transaction_t 
         return TYPE_TAG_UNEXPECTED_ERROR;
     }
 
-    args_coin_transfer_t *coin_transfer = &payload->args.coin_transfer;
+    args_coin_transfer_t* coin_transfer = &payload->args.coin_transfer;
     // read coin struct address field
-    if (!bcs_read_fixed_bytes(buf, (uint8_t *) &coin_transfer->ty_coin.address, ADDRESS_LEN)) {
+    if (!bcs_read_fixed_bytes(buf, (uint8_t*)&coin_transfer->ty_coin.address,
+                              ADDRESS_LEN)) {
         return STRUCT_ADDRESS_READ_ERROR;
     }
     // read coin struct module name len
-    if (!bcs_read_u32_from_uleb128(buf, (uint32_t *) &coin_transfer->ty_coin.module_name.len)) {
+    if (!bcs_read_u32_from_uleb128(
+            buf, (uint32_t*)&coin_transfer->ty_coin.module_name.len)) {
         return STRUCT_MODULE_LEN_READ_ERROR;
     }
     // read coin struct module name field
@@ -304,17 +320,18 @@ parser_status_e coin_transfer_function_deserialize(buffer_t *buf, transaction_t 
         return STRUCT_MODULE_BYTES_READ_ERROR;
     }
     // read coin struct name len
-    if (!bcs_read_u32_from_uleb128(buf, (uint32_t *) &coin_transfer->ty_coin.name.len)) {
+    if (!bcs_read_u32_from_uleb128(
+            buf, (uint32_t*)&coin_transfer->ty_coin.name.len)) {
         return STRUCT_NAME_LEN_READ_ERROR;
     }
     // read coin struct name field
-    if (!bcs_read_ptr_to_fixed_bytes(buf,
-                                     &coin_transfer->ty_coin.name.bytes,
+    if (!bcs_read_ptr_to_fixed_bytes(buf, &coin_transfer->ty_coin.name.bytes,
                                      coin_transfer->ty_coin.name.len)) {
         return STRUCT_NAME_BYTES_READ_ERROR;
     }
     // read coin struct args size
-    if (!bcs_read_u32_from_uleb128(buf, (uint32_t *) &coin_transfer->ty_coin.type_args_size)) {
+    if (!bcs_read_u32_from_uleb128(
+            buf, (uint32_t*)&coin_transfer->ty_coin.type_args_size)) {
         return STRUCT_TYPE_ARGS_SIZE_READ_ERROR;
     }
     if (coin_transfer->ty_coin.type_args_size != 0) {
@@ -322,7 +339,7 @@ parser_status_e coin_transfer_function_deserialize(buffer_t *buf, transaction_t 
     }
 
     // read args size
-    if (!bcs_read_u32_from_uleb128(buf, (uint32_t *) &payload->args.args_size)) {
+    if (!bcs_read_u32_from_uleb128(buf, (uint32_t*)&payload->args.args_size)) {
         return ARGS_SIZE_READ_ERROR;
     }
     if (payload->args.args_size != 2) {
@@ -337,7 +354,8 @@ parser_status_e coin_transfer_function_deserialize(buffer_t *buf, transaction_t 
         return WRONG_ADDRESS_LEN_ERROR;
     }
     // read receiver address field
-    if (!bcs_read_fixed_bytes(buf, (uint8_t *) &payload->args.transfer.receiver, ADDRESS_LEN)) {
+    if (!bcs_read_fixed_bytes(buf, (uint8_t*)&payload->args.transfer.receiver,
+                              ADDRESS_LEN)) {
         return RECEIVER_ADDR_READ_ERROR;
     }
     uint32_t amount_len;
@@ -356,17 +374,18 @@ parser_status_e coin_transfer_function_deserialize(buffer_t *buf, transaction_t 
     return PARSING_OK;
 }
 
-parser_status_e fa_transfer_function_deserialize(buffer_t *buf, transaction_t *tx) {
+parser_status_e fa_transfer_function_deserialize(buffer_t* buf,
+                                                 transaction_t* tx) {
     if (tx->payload_variant != PAYLOAD_ENTRY_FUNCTION) {
         return PAYLOAD_UNDEFINED_ERROR;
     }
-    entry_function_payload_t *payload = &tx->payload.entry_function;
+    entry_function_payload_t* payload = &tx->payload.entry_function;
     if (payload->known_type != FUNC_FUNGIBLE_STORE_TRANSFER) {
         return PAYLOAD_UNDEFINED_ERROR;
     }
 
     // read type args size
-    if (!bcs_read_u32_from_uleb128(buf, (uint32_t *) &payload->args.ty_size)) {
+    if (!bcs_read_u32_from_uleb128(buf, (uint32_t*)&payload->args.ty_size)) {
         return TYPE_ARGS_SIZE_READ_ERROR;
     }
 
@@ -384,13 +403,15 @@ parser_status_e fa_transfer_function_deserialize(buffer_t *buf, transaction_t *t
     }
 
     // READ type Arguments
-    args_fungible_asset_transfer_t *fa_transfer = &payload->args.fa_transfer;
+    args_fungible_asset_transfer_t* fa_transfer = &payload->args.fa_transfer;
     // read coin struct address field
-    if (!bcs_read_fixed_bytes(buf, (uint8_t *) &fa_transfer->ty_args.address, ADDRESS_LEN)) {
+    if (!bcs_read_fixed_bytes(buf, (uint8_t*)&fa_transfer->ty_args.address,
+                              ADDRESS_LEN)) {
         return STRUCT_ADDRESS_READ_ERROR;
     }
     // read coin struct module name len
-    if (!bcs_read_u32_from_uleb128(buf, (uint32_t *) &fa_transfer->ty_args.module_name.len)) {
+    if (!bcs_read_u32_from_uleb128(
+            buf, (uint32_t*)&fa_transfer->ty_args.module_name.len)) {
         return STRUCT_MODULE_LEN_READ_ERROR;
     }
     // read coin struct module name field
@@ -400,18 +421,19 @@ parser_status_e fa_transfer_function_deserialize(buffer_t *buf, transaction_t *t
         return STRUCT_MODULE_BYTES_READ_ERROR;
     }
     // read coin struct name len
-    if (!bcs_read_u32_from_uleb128(buf, (uint32_t *) &fa_transfer->ty_args.name.len)) {
+    if (!bcs_read_u32_from_uleb128(buf,
+                                   (uint32_t*)&fa_transfer->ty_args.name.len)) {
         return STRUCT_NAME_LEN_READ_ERROR;
     }
     // read coin struct name field
-    if (!bcs_read_ptr_to_fixed_bytes(buf,
-                                     &fa_transfer->ty_args.name.bytes,
+    if (!bcs_read_ptr_to_fixed_bytes(buf, &fa_transfer->ty_args.name.bytes,
                                      fa_transfer->ty_args.name.len)) {
         return STRUCT_NAME_BYTES_READ_ERROR;
     }
 
     // read coin struct args size
-    if (!bcs_read_u32_from_uleb128(buf, (uint32_t *) &fa_transfer->ty_args.type_args_size)) {
+    if (!bcs_read_u32_from_uleb128(
+            buf, (uint32_t*)&fa_transfer->ty_args.type_args_size)) {
         return STRUCT_TYPE_ARGS_SIZE_READ_ERROR;
     }
     if (fa_transfer->ty_args.type_args_size != 0) {
@@ -420,7 +442,7 @@ parser_status_e fa_transfer_function_deserialize(buffer_t *buf, transaction_t *t
 
     // READ function arguments
     // read args size
-    if (!bcs_read_u32_from_uleb128(buf, (uint32_t *) &payload->args.args_size)) {
+    if (!bcs_read_u32_from_uleb128(buf, (uint32_t*)&payload->args.args_size)) {
         return ARGS_SIZE_READ_ERROR;
     }
     if (payload->args.args_size != 3) {
@@ -437,7 +459,8 @@ parser_status_e fa_transfer_function_deserialize(buffer_t *buf, transaction_t *t
     }
 
     // add fungible store address
-    if (!bcs_read_fixed_bytes(buf, (uint8_t *) &fa_transfer->fungible_asset.address, ADDRESS_LEN)) {
+    if (!bcs_read_fixed_bytes(
+            buf, (uint8_t*)&fa_transfer->fungible_asset.address, ADDRESS_LEN)) {
         return STRUCT_ADDRESS_READ_ERROR;
     }
 
@@ -450,7 +473,8 @@ parser_status_e fa_transfer_function_deserialize(buffer_t *buf, transaction_t *t
         return WRONG_ADDRESS_LEN_ERROR;
     }
     // read receiver address field
-    if (!bcs_read_fixed_bytes(buf, (uint8_t *) &payload->args.fa_transfer.receiver, ADDRESS_LEN)) {
+    if (!bcs_read_fixed_bytes(
+            buf, (uint8_t*)&payload->args.fa_transfer.receiver, ADDRESS_LEN)) {
         return RECEIVER_ADDR_READ_ERROR;
     }
     uint32_t amount_len;
@@ -469,19 +493,20 @@ parser_status_e fa_transfer_function_deserialize(buffer_t *buf, transaction_t *t
     return PARSING_OK;
 }
 
-parser_status_e delegation_pool_deserialize(buffer_t *buf, transaction_t *tx) {
+parser_status_e delegation_pool_deserialize(buffer_t* buf, transaction_t* tx) {
     if (tx->payload_variant != PAYLOAD_ENTRY_FUNCTION) {
         return PAYLOAD_UNDEFINED_ERROR;
     }
-    entry_function_payload_t *payload = &tx->payload.entry_function;
-    if (payload->known_type != FUNC_ADD_STAKE && payload->known_type != FUNC_UNLOCK_STAKE &&
+    entry_function_payload_t* payload = &tx->payload.entry_function;
+    if (payload->known_type != FUNC_ADD_STAKE &&
+        payload->known_type != FUNC_UNLOCK_STAKE &&
         payload->known_type != FUNC_REACTIVATE_STAKE &&
         payload->known_type != FUNC_WITHDRAW_STAKE) {
         return PAYLOAD_UNDEFINED_ERROR;
     }
 
     // read type args size
-    if (!bcs_read_u32_from_uleb128(buf, (uint32_t *) &payload->args.ty_size)) {
+    if (!bcs_read_u32_from_uleb128(buf, (uint32_t*)&payload->args.ty_size)) {
         return TYPE_ARGS_SIZE_READ_ERROR;
     }
 
@@ -490,7 +515,7 @@ parser_status_e delegation_pool_deserialize(buffer_t *buf, transaction_t *tx) {
     }
 
     // read args size
-    if (!bcs_read_u32_from_uleb128(buf, (uint32_t *) &payload->args.args_size)) {
+    if (!bcs_read_u32_from_uleb128(buf, (uint32_t*)&payload->args.args_size)) {
         return ARGS_SIZE_READ_ERROR;
     }
     if (payload->args.args_size != 2) {
@@ -507,7 +532,8 @@ parser_status_e delegation_pool_deserialize(buffer_t *buf, transaction_t *tx) {
         return WRONG_ADDRESS_LEN_ERROR;
     }
     //  read receiver pool field
-    if (!bcs_read_fixed_bytes(buf, (uint8_t *) &payload->args.delegation.pool, ADDRESS_LEN)) {
+    if (!bcs_read_fixed_bytes(buf, (uint8_t*)&payload->args.delegation.pool,
+                              ADDRESS_LEN)) {
         return RECEIVER_ADDR_READ_ERROR;
     }
 
@@ -528,7 +554,7 @@ parser_status_e delegation_pool_deserialize(buffer_t *buf, transaction_t *tx) {
     return PARSING_OK;
 }
 
-static parser_status_e skip_type_tag(buffer_t *buf, uint8_t depth) {
+static parser_status_e skip_type_tag(buffer_t* buf, uint8_t depth) {
     if (depth > MAX_TYPE_TAG_DEPTH) {
         return TYPE_TAG_SKIP_ERROR;
     }
@@ -554,7 +580,8 @@ static parser_status_e skip_type_tag(buffer_t *buf, uint8_t depth) {
             // Vector contains one inner type tag
             return skip_type_tag(buf, depth + 1);
         case TYPE_TAG_STRUCT: {
-            // Struct: address (32 bytes) + module_name (string) + name (string) + type_args
+            // Struct: address (32 bytes) + module_name (string) + name (string)
+            // + type_args
             if (!buffer_can_read(buf, ADDRESS_LEN)) {
                 return TYPE_TAG_SKIP_ERROR;
             }
@@ -595,7 +622,7 @@ static parser_status_e skip_type_tag(buffer_t *buf, uint8_t depth) {
     }
 }
 
-static parser_status_e skip_all_type_args(buffer_t *buf) {
+static parser_status_e skip_all_type_args(buffer_t* buf) {
     uint32_t num_type_args = 0;
     if (!bcs_read_u32_from_uleb128(buf, &num_type_args)) {
         return TYPE_ARGS_SIZE_READ_ERROR;
@@ -628,12 +655,13 @@ static generic_arg_type_t infer_arg_type(uint32_t len) {
     }
 }
 
-parser_status_e generic_entry_function_deserialize(buffer_t *buf, transaction_t *tx) {
+parser_status_e generic_entry_function_deserialize(buffer_t* buf,
+                                                   transaction_t* tx) {
     if (tx->payload_variant != PAYLOAD_ENTRY_FUNCTION) {
         return PAYLOAD_UNDEFINED_ERROR;
     }
-    entry_function_payload_t *payload = &tx->payload.entry_function;
-    args_generic_t *generic = &payload->args.generic;
+    entry_function_payload_t* payload = &tx->payload.entry_function;
+    args_generic_t* generic = &payload->args.generic;
 
     // Skip type arguments (we don't need them for display)
     parser_status_e status = skip_all_type_args(buf);
@@ -647,7 +675,8 @@ parser_status_e generic_entry_function_deserialize(buffer_t *buf, transaction_t 
         return ARGS_SIZE_READ_ERROR;
     }
     generic->num_args = num_args;
-    generic->num_parsed = (num_args < MAX_GENERIC_ARGS) ? num_args : MAX_GENERIC_ARGS;
+    generic->num_parsed =
+        (num_args < MAX_GENERIC_ARGS) ? num_args : MAX_GENERIC_ARGS;
 
     // Parse up to MAX_GENERIC_ARGS arguments
     for (size_t i = 0; i < generic->num_parsed; i++) {
@@ -657,7 +686,8 @@ parser_status_e generic_entry_function_deserialize(buffer_t *buf, transaction_t 
         }
         generic->args[i].raw_len = arg_len;
         if (arg_len > 0) {
-            if (!bcs_read_ptr_to_fixed_bytes(buf, &generic->args[i].raw_ptr, arg_len)) {
+            if (!bcs_read_ptr_to_fixed_bytes(buf, &generic->args[i].raw_ptr,
+                                             arg_len)) {
                 return GENERIC_ARG_BYTES_READ_ERROR;
             }
         } else {
@@ -680,11 +710,11 @@ parser_status_e generic_entry_function_deserialize(buffer_t *buf, transaction_t 
     return PARSING_OK;
 }
 
-parser_status_e script_payload_deserialize(buffer_t *buf, transaction_t *tx) {
+parser_status_e script_payload_deserialize(buffer_t* buf, transaction_t* tx) {
     if (tx->payload_variant != PAYLOAD_SCRIPT) {
         return PAYLOAD_UNDEFINED_ERROR;
     }
-    script_payload_parsed_t *script = &tx->payload.script_parsed;
+    script_payload_parsed_t* script = &tx->payload.script_parsed;
     memset(script, 0, sizeof(*script));
 
     // Read and skip script bytecode
@@ -709,7 +739,8 @@ parser_status_e script_payload_deserialize(buffer_t *buf, transaction_t *tx) {
         return ARGS_SIZE_READ_ERROR;
     }
     script->num_args = num_args;
-    script->num_parsed = (num_args < MAX_GENERIC_ARGS) ? num_args : MAX_GENERIC_ARGS;
+    script->num_parsed =
+        (num_args < MAX_GENERIC_ARGS) ? num_args : MAX_GENERIC_ARGS;
 
     for (size_t i = 0; i < num_args; i++) {
         uint32_t variant = 0;
@@ -754,10 +785,11 @@ parser_status_e script_payload_deserialize(buffer_t *buf, transaction_t *tx) {
         }
 
         if (i < script->num_parsed) {
-            script->args[i].variant = (script_arg_variant_t) variant;
+            script->args[i].variant = (script_arg_variant_t)variant;
             script->args[i].raw_len = arg_len;
             if (arg_len > 0) {
-                if (!bcs_read_ptr_to_fixed_bytes(buf, &script->args[i].raw_ptr, arg_len)) {
+                if (!bcs_read_ptr_to_fixed_bytes(buf, &script->args[i].raw_ptr,
+                                                 arg_len)) {
                     return SCRIPT_ARG_READ_ERROR;
                 }
             } else {
@@ -774,13 +806,14 @@ parser_status_e script_payload_deserialize(buffer_t *buf, transaction_t *tx) {
     return PARSING_OK;
 }
 
-parser_status_e multisig_payload_deserialize(buffer_t *buf, transaction_t *tx) {
+parser_status_e multisig_payload_deserialize(buffer_t* buf, transaction_t* tx) {
     if (tx->payload_variant != PAYLOAD_MULTISIG) {
         return PAYLOAD_UNDEFINED_ERROR;
     }
 
     // Read multisig address
-    if (!bcs_read_fixed_bytes(buf, tx->multisig_meta.multisig_address, ADDRESS_LEN)) {
+    if (!bcs_read_fixed_bytes(buf, tx->multisig_meta.multisig_address,
+                              ADDRESS_LEN)) {
         return MULTISIG_ADDRESS_READ_ERROR;
     }
 
@@ -793,8 +826,8 @@ parser_status_e multisig_payload_deserialize(buffer_t *buf, transaction_t *tx) {
 
     if (has_inner) {
         // Read MultisigTransactionPayload enum discriminant
-        // MultisigTransactionPayload::EntryFunction is variant 0 (not the outer TransactionPayload
-        // variant)
+        // MultisigTransactionPayload::EntryFunction is variant 0 (not the outer
+        // TransactionPayload variant)
         uint32_t inner_variant = 0;
         if (!bcs_read_u32_from_uleb128(buf, &inner_variant)) {
             return PAYLOAD_VARIANT_READ_ERROR;
@@ -813,15 +846,16 @@ parser_status_e multisig_payload_deserialize(buffer_t *buf, transaction_t *tx) {
     return PARSING_OK;
 }
 
-parser_status_e multisig_create_transaction_deserialize(buffer_t *buf, transaction_t *tx) {
+parser_status_e multisig_create_transaction_deserialize(buffer_t* buf,
+                                                        transaction_t* tx) {
     if (tx->payload_variant != PAYLOAD_ENTRY_FUNCTION) {
         return PAYLOAD_UNDEFINED_ERROR;
     }
-    entry_function_payload_t *payload = &tx->payload.entry_function;
-    args_multisig_create_t *create = &payload->args.multisig_create;
+    entry_function_payload_t* payload = &tx->payload.entry_function;
+    args_multisig_create_t* create = &payload->args.multisig_create;
 
     // Read type args size (should be 0)
-    if (!bcs_read_u32_from_uleb128(buf, (uint32_t *) &payload->args.ty_size)) {
+    if (!bcs_read_u32_from_uleb128(buf, (uint32_t*)&payload->args.ty_size)) {
         return TYPE_ARGS_SIZE_READ_ERROR;
     }
     if (payload->args.ty_size != 0) {
@@ -829,7 +863,7 @@ parser_status_e multisig_create_transaction_deserialize(buffer_t *buf, transacti
     }
 
     // Read args count (should be 2: multisig_address + payload_bytes)
-    if (!bcs_read_u32_from_uleb128(buf, (uint32_t *) &payload->args.args_size)) {
+    if (!bcs_read_u32_from_uleb128(buf, (uint32_t*)&payload->args.args_size)) {
         return ARGS_SIZE_READ_ERROR;
     }
     if (payload->args.args_size != 2) {
@@ -855,7 +889,7 @@ parser_status_e multisig_create_transaction_deserialize(buffer_t *buf, transacti
     }
 
     // Get pointer to the raw inner payload bytes
-    uint8_t *inner_ptr = NULL;
+    uint8_t* inner_ptr = NULL;
     if (!bcs_read_ptr_to_fixed_bytes(buf, &inner_ptr, payload_len)) {
         return GENERIC_ARG_BYTES_READ_ERROR;
     }
@@ -873,10 +907,12 @@ parser_status_e multisig_create_transaction_deserialize(buffer_t *buf, transacti
     }
 
     // Parse inner entry function: module_id + function_name
-    if (!bcs_read_fixed_bytes(&inner_buf, create->inner_module_address, ADDRESS_LEN)) {
+    if (!bcs_read_fixed_bytes(&inner_buf, create->inner_module_address,
+                              ADDRESS_LEN)) {
         return MODULE_ID_ADDR_READ_ERROR;
     }
-    if (!bcs_read_u32_from_uleb128(&inner_buf, (uint32_t *) &create->inner_module_name.len)) {
+    if (!bcs_read_u32_from_uleb128(&inner_buf,
+                                   (uint32_t*)&create->inner_module_name.len)) {
         return MODULE_ID_NAME_LEN_READ_ERROR;
     }
     if (!bcs_read_ptr_to_fixed_bytes(&inner_buf,
@@ -884,7 +920,8 @@ parser_status_e multisig_create_transaction_deserialize(buffer_t *buf, transacti
                                      create->inner_module_name.len)) {
         return MODULE_ID_NAME_BYTES_READ_ERROR;
     }
-    if (!bcs_read_u32_from_uleb128(&inner_buf, (uint32_t *) &create->inner_function_name.len)) {
+    if (!bcs_read_u32_from_uleb128(
+            &inner_buf, (uint32_t*)&create->inner_function_name.len)) {
         return FUNCTION_NAME_LEN_READ_ERROR;
     }
     if (!bcs_read_ptr_to_fixed_bytes(&inner_buf,
@@ -915,9 +952,8 @@ parser_status_e multisig_create_transaction_deserialize(buffer_t *buf, transacti
         }
         create->inner_args.args[i].raw_len = arg_len;
         if (arg_len > 0) {
-            if (!bcs_read_ptr_to_fixed_bytes(&inner_buf,
-                                             &create->inner_args.args[i].raw_ptr,
-                                             arg_len)) {
+            if (!bcs_read_ptr_to_fixed_bytes(
+                    &inner_buf, &create->inner_args.args[i].raw_ptr, arg_len)) {
                 return GENERIC_ARG_BYTES_READ_ERROR;
             }
         } else {
@@ -942,15 +978,16 @@ parser_status_e multisig_create_transaction_deserialize(buffer_t *buf, transacti
     return PARSING_OK;
 }
 
-parser_status_e multisig_create_hash_deserialize(buffer_t *buf, transaction_t *tx) {
+parser_status_e multisig_create_hash_deserialize(buffer_t* buf,
+                                                 transaction_t* tx) {
     if (tx->payload_variant != PAYLOAD_ENTRY_FUNCTION) {
         return PAYLOAD_UNDEFINED_ERROR;
     }
-    entry_function_payload_t *payload = &tx->payload.entry_function;
-    args_multisig_create_hash_t *create = &payload->args.multisig_create_hash;
+    entry_function_payload_t* payload = &tx->payload.entry_function;
+    args_multisig_create_hash_t* create = &payload->args.multisig_create_hash;
 
     // Read type args (should be 0)
-    if (!bcs_read_u32_from_uleb128(buf, (uint32_t *) &payload->args.ty_size)) {
+    if (!bcs_read_u32_from_uleb128(buf, (uint32_t*)&payload->args.ty_size)) {
         return TYPE_ARGS_SIZE_READ_ERROR;
     }
     if (payload->args.ty_size != 0) {
@@ -958,7 +995,7 @@ parser_status_e multisig_create_hash_deserialize(buffer_t *buf, transaction_t *t
     }
 
     // Read args count (should be 2)
-    if (!bcs_read_u32_from_uleb128(buf, (uint32_t *) &payload->args.args_size)) {
+    if (!bcs_read_u32_from_uleb128(buf, (uint32_t*)&payload->args.args_size)) {
         return ARGS_SIZE_READ_ERROR;
     }
     if (payload->args.args_size != 2) {
@@ -982,7 +1019,8 @@ parser_status_e multisig_create_hash_deserialize(buffer_t *buf, transaction_t *t
         return GENERIC_ARG_LEN_READ_ERROR;
     }
     if (create->payload_hash_len > 0) {
-        if (!bcs_read_ptr_to_fixed_bytes(buf, &create->payload_hash, create->payload_hash_len)) {
+        if (!bcs_read_ptr_to_fixed_bytes(buf, &create->payload_hash,
+                                         create->payload_hash_len)) {
             return GENERIC_ARG_BYTES_READ_ERROR;
         }
     } else {
@@ -992,15 +1030,15 @@ parser_status_e multisig_create_hash_deserialize(buffer_t *buf, transaction_t *t
     return PARSING_OK;
 }
 
-parser_status_e multisig_vote_deserialize(buffer_t *buf, transaction_t *tx) {
+parser_status_e multisig_vote_deserialize(buffer_t* buf, transaction_t* tx) {
     if (tx->payload_variant != PAYLOAD_ENTRY_FUNCTION) {
         return PAYLOAD_UNDEFINED_ERROR;
     }
-    entry_function_payload_t *payload = &tx->payload.entry_function;
-    args_multisig_vote_t *vote = &payload->args.multisig_vote;
+    entry_function_payload_t* payload = &tx->payload.entry_function;
+    args_multisig_vote_t* vote = &payload->args.multisig_vote;
 
     // 0 type args
-    if (!bcs_read_u32_from_uleb128(buf, (uint32_t *) &payload->args.ty_size)) {
+    if (!bcs_read_u32_from_uleb128(buf, (uint32_t*)&payload->args.ty_size)) {
         return TYPE_ARGS_SIZE_READ_ERROR;
     }
     if (payload->args.ty_size != 0) {
@@ -1008,7 +1046,7 @@ parser_status_e multisig_vote_deserialize(buffer_t *buf, transaction_t *tx) {
     }
 
     // 2 or 3 args (approve/reject=2, vote=3 with bool)
-    if (!bcs_read_u32_from_uleb128(buf, (uint32_t *) &payload->args.args_size)) {
+    if (!bcs_read_u32_from_uleb128(buf, (uint32_t*)&payload->args.args_size)) {
         return ARGS_SIZE_READ_ERROR;
     }
 
@@ -1050,15 +1088,16 @@ parser_status_e multisig_vote_deserialize(buffer_t *buf, transaction_t *tx) {
     return PARSING_OK;
 }
 
-parser_status_e multisig_create_with_owners_deserialize(buffer_t *buf, transaction_t *tx) {
+parser_status_e multisig_create_with_owners_deserialize(buffer_t* buf,
+                                                        transaction_t* tx) {
     if (tx->payload_variant != PAYLOAD_ENTRY_FUNCTION) {
         return PAYLOAD_UNDEFINED_ERROR;
     }
-    entry_function_payload_t *payload = &tx->payload.entry_function;
-    args_multisig_create_with_owners_t *owners = &payload->args.multisig_owners;
+    entry_function_payload_t* payload = &tx->payload.entry_function;
+    args_multisig_create_with_owners_t* owners = &payload->args.multisig_owners;
 
     // 0 type args
-    if (!bcs_read_u32_from_uleb128(buf, (uint32_t *) &payload->args.ty_size)) {
+    if (!bcs_read_u32_from_uleb128(buf, (uint32_t*)&payload->args.ty_size)) {
         return TYPE_ARGS_SIZE_READ_ERROR;
     }
     if (payload->args.ty_size != 0) {
@@ -1066,23 +1105,24 @@ parser_status_e multisig_create_with_owners_deserialize(buffer_t *buf, transacti
     }
 
     // 4 args: vector<address>, u64, vector<String>, vector<vector<u8>>
-    if (!bcs_read_u32_from_uleb128(buf, (uint32_t *) &payload->args.args_size)) {
+    if (!bcs_read_u32_from_uleb128(buf, (uint32_t*)&payload->args.args_size)) {
         return ARGS_SIZE_READ_ERROR;
     }
 
-    // Arg 1: vector<address> (BCS: ULEB128 length prefix for the arg, then ULEB128 count, then
-    // addresses)
+    // Arg 1: vector<address> (BCS: ULEB128 length prefix for the arg, then
+    // ULEB128 count, then addresses)
     uint32_t owners_arg_len = 0;
     if (!bcs_read_u32_from_uleb128(buf, &owners_arg_len)) {
         return GENERIC_ARG_LEN_READ_ERROR;
     }
     // Save position to handle the arg as a sub-buffer
-    uint8_t *owners_arg_ptr = NULL;
+    uint8_t* owners_arg_ptr = NULL;
     if (!bcs_read_ptr_to_fixed_bytes(buf, &owners_arg_ptr, owners_arg_len)) {
         return GENERIC_ARG_BYTES_READ_ERROR;
     }
     // Parse the owners vector from the sub-buffer
-    buffer_t owners_buf = {.ptr = owners_arg_ptr, .size = owners_arg_len, .offset = 0};
+    buffer_t owners_buf = {
+        .ptr = owners_arg_ptr, .size = owners_arg_len, .offset = 0};
     uint32_t num_owners = 0;
     if (!bcs_read_u32_from_uleb128(&owners_buf, &num_owners)) {
         return ARGS_SIZE_READ_ERROR;
@@ -1091,7 +1131,8 @@ parser_status_e multisig_create_with_owners_deserialize(buffer_t *buf, transacti
     owners->num_owners_displayed =
         (num_owners < MAX_MULTISIG_OWNERS) ? num_owners : MAX_MULTISIG_OWNERS;
     for (size_t i = 0; i < owners->num_owners_displayed; i++) {
-        if (!bcs_read_fixed_bytes(&owners_buf, owners->owners[i], ADDRESS_LEN)) {
+        if (!bcs_read_fixed_bytes(&owners_buf, owners->owners[i],
+                                  ADDRESS_LEN)) {
             return RECEIVER_ADDR_READ_ERROR;
         }
     }
@@ -1122,87 +1163,92 @@ parser_status_e multisig_create_with_owners_deserialize(buffer_t *buf, transacti
     return PARSING_OK;
 }
 
-entry_function_known_type_t determine_function_type(transaction_t *tx) {
+entry_function_known_type_t determine_function_type(transaction_t* tx) {
     if (tx->payload_variant != PAYLOAD_ENTRY_FUNCTION) {
         return FUNC_UNKNOWN;
     }
 
     if (tx->payload.entry_function.module_id.address[ADDRESS_LEN - 1] == 0x01 &&
-        bcs_cmp_bytes(&tx->payload.entry_function.module_id.name, "aptos_account", 13) &&
-        bcs_cmp_bytes(&tx->payload.entry_function.function_name, "transfer", 8)) {
+        bcs_cmp_bytes(&tx->payload.entry_function.module_id.name,
+                      "aptos_account", 13) &&
+        bcs_cmp_bytes(&tx->payload.entry_function.function_name, "transfer",
+                      8)) {
         return FUNC_APTOS_ACCOUNT_TRANSFER;
     }
 
     if (tx->payload.entry_function.module_id.address[ADDRESS_LEN - 1] == 0x01 &&
         bcs_cmp_bytes(&tx->payload.entry_function.module_id.name, "coin", 4) &&
-        bcs_cmp_bytes(&tx->payload.entry_function.function_name, "transfer", 8)) {
+        bcs_cmp_bytes(&tx->payload.entry_function.function_name, "transfer",
+                      8)) {
         return FUNC_COIN_TRANSFER;
     }
 
     if (tx->payload.entry_function.module_id.address[ADDRESS_LEN - 1] == 0x01 &&
-        bcs_cmp_bytes(&tx->payload.entry_function.module_id.name, "aptos_account", 13) &&
-        bcs_cmp_bytes(&tx->payload.entry_function.function_name, "transfer_coins", 14)) {
+        bcs_cmp_bytes(&tx->payload.entry_function.module_id.name,
+                      "aptos_account", 13) &&
+        bcs_cmp_bytes(&tx->payload.entry_function.function_name,
+                      "transfer_coins", 14)) {
         return FUNC_APTOS_ACCOUNT_TRANSFER_COINS;
     }
 
     if (tx->payload.entry_function.module_id.address[ADDRESS_LEN - 1] == 0x01 &&
-        bcs_cmp_bytes(&tx->payload.entry_function.module_id.name, "primary_fungible_store", 22) &&
-        bcs_cmp_bytes(&tx->payload.entry_function.function_name, "transfer", 8)) {
+        bcs_cmp_bytes(&tx->payload.entry_function.module_id.name,
+                      "primary_fungible_store", 22) &&
+        bcs_cmp_bytes(&tx->payload.entry_function.function_name, "transfer",
+                      8)) {
         return FUNC_FUNGIBLE_STORE_TRANSFER;
     }
 
     if (tx->payload.entry_function.module_id.address[ADDRESS_LEN - 1] == 0x01 &&
-        bcs_cmp_bytes(&tx->payload.entry_function.module_id.name, "multisig_account", 16)) {
+        bcs_cmp_bytes(&tx->payload.entry_function.module_id.name,
+                      "multisig_account", 16)) {
         if (bcs_cmp_bytes(&tx->payload.entry_function.function_name,
-                          "create_transaction",
-                          18)) {
+                          "create_transaction", 18)) {
             return FUNC_MULTISIG_CREATE_TRANSACTION;
         }
         if (bcs_cmp_bytes(&tx->payload.entry_function.function_name,
-                          "create_transaction_with_hash",
-                          28)) {
+                          "create_transaction_with_hash", 28)) {
             return FUNC_MULTISIG_CREATE_WITH_HASH;
         }
         if (bcs_cmp_bytes(&tx->payload.entry_function.function_name,
-                          "approve_transaction",
-                          19)) {
+                          "approve_transaction", 19)) {
             return FUNC_MULTISIG_APPROVE;
         }
         if (bcs_cmp_bytes(&tx->payload.entry_function.function_name,
-                          "reject_transaction",
-                          18)) {
+                          "reject_transaction", 18)) {
             return FUNC_MULTISIG_REJECT;
         }
         if (bcs_cmp_bytes(&tx->payload.entry_function.function_name,
-                          "vote_transaction",
-                          16) ||
+                          "vote_transaction", 16) ||
             bcs_cmp_bytes(&tx->payload.entry_function.function_name,
-                          "vote_transanction",
-                          17)) {
+                          "vote_transanction", 17)) {
             return FUNC_MULTISIG_VOTE;
         }
         if (bcs_cmp_bytes(&tx->payload.entry_function.function_name,
-                          "create_with_owners",
-                          18) ||
+                          "create_with_owners", 18) ||
             bcs_cmp_bytes(&tx->payload.entry_function.function_name,
-                          "create_with_owners_then_remove_bootstrapper",
-                          43)) {
+                          "create_with_owners_then_remove_bootstrapper", 43)) {
             return FUNC_MULTISIG_CREATE_WITH_OWNERS;
         }
     }
 
     if (tx->payload.entry_function.module_id.address[ADDRESS_LEN - 1] == 0x01 &&
-        bcs_cmp_bytes(&tx->payload.entry_function.module_id.name, "delegation_pool", 15)) {
-        if (bcs_cmp_bytes(&tx->payload.entry_function.function_name, "add_stake", 9)) {
+        bcs_cmp_bytes(&tx->payload.entry_function.module_id.name,
+                      "delegation_pool", 15)) {
+        if (bcs_cmp_bytes(&tx->payload.entry_function.function_name,
+                          "add_stake", 9)) {
             return FUNC_ADD_STAKE;
         }
-        if (bcs_cmp_bytes(&tx->payload.entry_function.function_name, "unlock", 6)) {
+        if (bcs_cmp_bytes(&tx->payload.entry_function.function_name, "unlock",
+                          6)) {
             return FUNC_UNLOCK_STAKE;
         }
-        if (bcs_cmp_bytes(&tx->payload.entry_function.function_name, "reactivate_stake", 16)) {
+        if (bcs_cmp_bytes(&tx->payload.entry_function.function_name,
+                          "reactivate_stake", 16)) {
             return FUNC_REACTIVATE_STAKE;
         }
-        if (bcs_cmp_bytes(&tx->payload.entry_function.function_name, "withdraw", 8)) {
+        if (bcs_cmp_bytes(&tx->payload.entry_function.function_name, "withdraw",
+                          8)) {
             return FUNC_WITHDRAW_STAKE;
         }
     }
