@@ -807,4 +807,43 @@ int ui_display_multisig_create_hash() {
     return ret;
 }
 
+// Step for displaying sequence number / threshold
+UX_STEP_NOCB(ux_display_tx_seq_step,
+             bnnn_paging,
+             {.title = "Transaction", .text = g_amount});
+
+// Multisig vote flow: tx type + multisig addr + sequence + gas
+UX_FLOW(ux_display_multisig_vote_flow,
+        &ux_display_review_step,
+        &ux_display_tx_type_step,
+        &ux_display_multisig_addr_step,
+        &ux_display_tx_seq_step,
+        &ux_display_gas_fee_step,
+        &ux_display_approve_step,
+        &ux_display_reject_step);
+
+int ui_display_multisig_vote() {
+    const int ret = ui_prepare_multisig_vote();
+    if (ret == UI_PREPARED) {
+        ui_flow_display(ux_display_multisig_vote_flow);
+        return 0;
+    }
+
+    return ret;
+}
+
+// Multisig create_with_owners: reuses generic flow for owner addresses
+int ui_display_multisig_create_with_owners() {
+    const int ret = ui_prepare_multisig_create_with_owners();
+    if (ret == UI_PREPARED) {
+        // Generic flow shows tx_type + function + args + gas
+        // We repurpose: function field is unused, args hold owner addresses
+        // Use script flow (no function field) since we show owners directly
+        ui_flow_display(get_script_flow(g_num_display_args));
+        return 0;
+    }
+
+    return ret;
+}
+
 #endif

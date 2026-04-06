@@ -73,6 +73,12 @@ int ui_prepare_multisig_create_transaction(void);
 int ui_display_multisig_create_hash(void);
 int ui_prepare_multisig_create_hash(void);
 
+int ui_display_multisig_vote(void);
+int ui_prepare_multisig_vote(void);
+
+int ui_display_multisig_create_with_owners(void);
+int ui_prepare_multisig_create_with_owners(void);
+
 #if defined(TARGET_STAX) || defined(TARGET_FLEX)
 #define ICON_APP_HOME C_aptos_logo_64px
 #elif defined(TARGET_APEX_P)

@@ -156,6 +156,10 @@ typedef enum {
     FUNC_WITHDRAW_STAKE = 8,
     FUNC_MULTISIG_CREATE_TRANSACTION = 9,
     FUNC_MULTISIG_CREATE_WITH_HASH = 10,
+    FUNC_MULTISIG_APPROVE = 11,
+    FUNC_MULTISIG_REJECT = 12,
+    FUNC_MULTISIG_CREATE_WITH_OWNERS = 13,
+    FUNC_MULTISIG_VOTE = 14,
 } entry_function_known_type_t;
 
 typedef struct {
@@ -204,6 +208,21 @@ typedef struct {
     uint32_t payload_hash_len;
 } args_multisig_create_hash_t;
 
+// Args for approve_transaction, reject_transaction, vote_transaction
+typedef struct {
+    uint8_t multisig_address[ADDRESS_LEN];
+    uint64_t sequence_number;
+} args_multisig_vote_t;
+
+// Args for create_with_owners
+#define MAX_MULTISIG_OWNERS 6
+typedef struct {
+    size_t num_owners;
+    size_t num_owners_displayed;  // min(num_owners, MAX_MULTISIG_OWNERS)
+    uint8_t owners[MAX_MULTISIG_OWNERS][ADDRESS_LEN];
+    uint64_t num_signatures_required;
+} args_multisig_create_with_owners_t;
+
 typedef struct {
     module_id_t module_id;
     fixed_bytes_t function_name;
@@ -220,6 +239,8 @@ typedef struct {
             args_generic_t generic;
             args_multisig_create_t multisig_create;
             args_multisig_create_hash_t multisig_create_hash;
+            args_multisig_vote_t multisig_vote;
+            args_multisig_create_with_owners_t multisig_owners;
         };
     } args;
 } entry_function_payload_t;

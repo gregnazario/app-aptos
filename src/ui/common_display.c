@@ -360,6 +360,12 @@ int ui_prepare_entry_function() {
             return ui_display_multisig_create_transaction();
         case FUNC_MULTISIG_CREATE_WITH_HASH:
             return ui_display_multisig_create_hash();
+        case FUNC_MULTISIG_APPROVE:
+        case FUNC_MULTISIG_REJECT:
+        case FUNC_MULTISIG_VOTE:
+            return ui_display_multisig_vote();
+        case FUNC_MULTISIG_CREATE_WITH_OWNERS:
+            return ui_display_multisig_create_with_owners();
         default:
             return ui_display_generic_entry_function();
     }
@@ -839,6 +845,77 @@ int ui_prepare_multisig_create_hash() {
 
     g_num_display_args = 0;
     memset(g_extra_info, 0, sizeof(g_extra_info));
+
+    return UI_PREPARED;
+}
+
+int ui_prepare_multisig_vote() {
+    entry_function_payload_t *payload = &G_context.tx_info.transaction.payload.entry_function;
+    args_multisig_vote_t *vote = &payload->args.multisig_vote;
+
+    memset(g_tx_type, 0, sizeof(g_tx_type));
+    switch (payload->known_type) {
+        case FUNC_MULTISIG_APPROVE:
+            snprintf(g_tx_type, sizeof(g_tx_type), "Approve multisig TX");
+            break;
+        case FUNC_MULTISIG_REJECT:
+            snprintf(g_tx_type, sizeof(g_tx_type), "Reject multisig TX");
+            break;
+        default:
+            snprintf(g_tx_type, sizeof(g_tx_type), "Vote multisig TX");
+            break;
+    }
+
+    memset(g_multisig_addr, 0, sizeof(g_multisig_addr));
+    if (0 > format_prefixed_hex(vote->multisig_address,
+                                ADDRESS_LEN,
+                                g_multisig_addr,
+                                sizeof(g_multisig_addr))) {
+        return io_send_sw(SW_DISPLAY_ADDRESS_FAIL);
+    }
+
+    memset(g_amount, 0, sizeof(g_amount));
+    snprintf(g_amount, sizeof(g_amount), "#%llu", (unsigned long long) vote->sequence_number);
+
+    g_num_display_args = 0;
+    memset(g_extra_info, 0, sizeof(g_extra_info));
+
+    return UI_PREPARED;
+}
+
+int ui_prepare_multisig_create_with_owners() {
+    args_multisig_create_with_owners_t *owners =
+        &G_context.tx_info.transaction.payload.entry_function.args.multisig_owners;
+
+    memset(g_tx_type, 0, sizeof(g_tx_type));
+    snprintf(g_tx_type, sizeof(g_tx_type), "Create multisig");
+
+    memset(g_amount, 0, sizeof(g_amount));
+    snprintf(g_amount,
+             sizeof(g_amount),
+             "%llu of %llu",
+             (unsigned long long) owners->num_signatures_required,
+             (unsigned long long) (owners->num_owners + 1));  // +1 for the signer
+
+    // Format owner addresses into the generic arg display buffers
+    g_num_display_args = (int) owners->num_owners_displayed;
+    for (int i = 0; i < g_num_display_args; i++) {
+        memset(g_arg_labels[i], 0, sizeof(g_arg_labels[i]));
+        memset(g_arg_values[i], 0, sizeof(g_arg_values[i]));
+        snprintf(g_arg_labels[i], sizeof(g_arg_labels[i]), "Owner #%d", i + 1);
+        format_prefixed_hex(owners->owners[i],
+                            ADDRESS_LEN,
+                            g_arg_values[i],
+                            sizeof(g_arg_values[i]));
+    }
+
+    memset(g_extra_info, 0, sizeof(g_extra_info));
+    if (owners->num_owners > owners->num_owners_displayed) {
+        snprintf(g_extra_info,
+                 sizeof(g_extra_info),
+                 "+%d more owners",
+                 (int) (owners->num_owners - owners->num_owners_displayed));
+    }
 
     return UI_PREPARED;
 }

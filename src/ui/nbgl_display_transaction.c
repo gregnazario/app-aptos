@@ -532,4 +532,82 @@ int ui_display_multisig_create_hash() {
 
     return ret;
 }
+
+int ui_display_multisig_vote() {
+    const int ret = ui_prepare_multisig_vote();
+    if (ret == UI_PREPARED) {
+        int idx = 0;
+        pairs[idx].item = "Transaction type";
+        pairs[idx].value = g_tx_type;
+        idx++;
+        pairs[idx].item = "Multisig";
+        pairs[idx].value = g_multisig_addr;
+        idx++;
+        pairs[idx].item = "Transaction";
+        pairs[idx].value = g_amount;
+        idx++;
+        pairs[idx].item = "Gas fee";
+        pairs[idx].value = g_gas_fee;
+        idx++;
+
+        pair_list.nbMaxLinesForValue = 0;
+        pair_list.nbPairs = idx;
+        pair_list.pairs = pairs;
+
+        nbgl_useCaseReview(TYPE_TRANSACTION,
+                           &pair_list,
+                           &ICON_APP_HOME,
+                           "Review multisig vote",
+                           NULL,
+                           "Sign transaction?",
+                           review_choice);
+        return 0;
+    }
+
+    return ret;
+}
+
+int ui_display_multisig_create_with_owners() {
+    const int ret = ui_prepare_multisig_create_with_owners();
+    if (ret == UI_PREPARED) {
+        int idx = 0;
+        pairs[idx].item = "Transaction type";
+        pairs[idx].value = g_tx_type;
+        idx++;
+        pairs[idx].item = "Threshold";
+        pairs[idx].value = g_amount;
+        idx++;
+
+        for (int i = 0; i < g_num_display_args; i++) {
+            pairs[idx].item = g_arg_labels[i];
+            pairs[idx].value = g_arg_values[i];
+            idx++;
+        }
+
+        if (g_extra_info[0] != '\0') {
+            pairs[idx].item = "Note";
+            pairs[idx].value = g_extra_info;
+            idx++;
+        }
+
+        pairs[idx].item = "Gas fee";
+        pairs[idx].value = g_gas_fee;
+        idx++;
+
+        pair_list.nbMaxLinesForValue = 0;
+        pair_list.nbPairs = idx;
+        pair_list.pairs = pairs;
+
+        nbgl_useCaseReview(TYPE_TRANSACTION,
+                           &pair_list,
+                           &ICON_APP_HOME,
+                           "Review multisig creation",
+                           NULL,
+                           "Sign transaction?",
+                           review_choice);
+        return 0;
+    }
+
+    return ret;
+}
 #endif

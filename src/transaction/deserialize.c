@@ -190,6 +190,12 @@ parser_status_e entry_function_payload_deserialize(buffer_t *buf, transaction_t 
             return multisig_create_transaction_deserialize(buf, tx);
         case FUNC_MULTISIG_CREATE_WITH_HASH:
             return multisig_create_hash_deserialize(buf, tx);
+        case FUNC_MULTISIG_APPROVE:
+        case FUNC_MULTISIG_REJECT:
+        case FUNC_MULTISIG_VOTE:
+            return multisig_vote_deserialize(buf, tx);
+        case FUNC_MULTISIG_CREATE_WITH_OWNERS:
+            return multisig_create_with_owners_deserialize(buf, tx);
         default:
             return generic_entry_function_deserialize(buf, tx);
     }
@@ -979,6 +985,136 @@ parser_status_e multisig_create_hash_deserialize(buffer_t *buf, transaction_t *t
     return PARSING_OK;
 }
 
+parser_status_e multisig_vote_deserialize(buffer_t *buf, transaction_t *tx) {
+    if (tx->payload_variant != PAYLOAD_ENTRY_FUNCTION) {
+        return PAYLOAD_UNDEFINED_ERROR;
+    }
+    entry_function_payload_t *payload = &tx->payload.entry_function;
+    args_multisig_vote_t *vote = &payload->args.multisig_vote;
+
+    // 0 type args
+    if (!bcs_read_u32_from_uleb128(buf, (uint32_t *) &payload->args.ty_size)) {
+        return TYPE_ARGS_SIZE_READ_ERROR;
+    }
+    if (payload->args.ty_size != 0) {
+        return TYPE_ARGS_SIZE_UNEXPECTED_ERROR;
+    }
+
+    // 2 or 3 args (approve/reject=2, vote=3 with bool)
+    if (!bcs_read_u32_from_uleb128(buf, (uint32_t *) &payload->args.args_size)) {
+        return ARGS_SIZE_READ_ERROR;
+    }
+
+    // Arg 1: multisig address
+    uint32_t addr_len = 0;
+    if (!bcs_read_u32_from_uleb128(buf, &addr_len)) {
+        return RECEIVER_ADDR_LEN_READ_ERROR;
+    }
+    if (addr_len != ADDRESS_LEN) {
+        return WRONG_ADDRESS_LEN_ERROR;
+    }
+    if (!bcs_read_fixed_bytes(buf, vote->multisig_address, ADDRESS_LEN)) {
+        return MULTISIG_ADDRESS_READ_ERROR;
+    }
+
+    // Arg 2: sequence number (u64)
+    uint32_t seq_len = 0;
+    if (!bcs_read_u32_from_uleb128(buf, &seq_len)) {
+        return AMOUNT_LEN_READ_ERROR;
+    }
+    if (seq_len != sizeof(uint64_t)) {
+        return WRONG_AMOUNT_LEN_ERROR;
+    }
+    if (!bcs_read_u64(buf, &vote->sequence_number)) {
+        return AMOUNT_READ_ERROR;
+    }
+
+    // Skip remaining args (vote_transaction has a bool arg3)
+    for (size_t i = 2; i < payload->args.args_size; i++) {
+        uint32_t arg_len = 0;
+        if (!bcs_read_u32_from_uleb128(buf, &arg_len)) {
+            return GENERIC_ARG_LEN_READ_ERROR;
+        }
+        if (arg_len > 0 && !buffer_seek_cur(buf, arg_len)) {
+            return GENERIC_ARG_BYTES_READ_ERROR;
+        }
+    }
+
+    return PARSING_OK;
+}
+
+parser_status_e multisig_create_with_owners_deserialize(buffer_t *buf, transaction_t *tx) {
+    if (tx->payload_variant != PAYLOAD_ENTRY_FUNCTION) {
+        return PAYLOAD_UNDEFINED_ERROR;
+    }
+    entry_function_payload_t *payload = &tx->payload.entry_function;
+    args_multisig_create_with_owners_t *owners = &payload->args.multisig_owners;
+
+    // 0 type args
+    if (!bcs_read_u32_from_uleb128(buf, (uint32_t *) &payload->args.ty_size)) {
+        return TYPE_ARGS_SIZE_READ_ERROR;
+    }
+    if (payload->args.ty_size != 0) {
+        return TYPE_ARGS_SIZE_UNEXPECTED_ERROR;
+    }
+
+    // 4 args: vector<address>, u64, vector<String>, vector<vector<u8>>
+    if (!bcs_read_u32_from_uleb128(buf, (uint32_t *) &payload->args.args_size)) {
+        return ARGS_SIZE_READ_ERROR;
+    }
+
+    // Arg 1: vector<address> (BCS: ULEB128 length prefix for the arg, then ULEB128 count, then
+    // addresses)
+    uint32_t owners_arg_len = 0;
+    if (!bcs_read_u32_from_uleb128(buf, &owners_arg_len)) {
+        return GENERIC_ARG_LEN_READ_ERROR;
+    }
+    // Save position to handle the arg as a sub-buffer
+    uint8_t *owners_arg_ptr = NULL;
+    if (!bcs_read_ptr_to_fixed_bytes(buf, &owners_arg_ptr, owners_arg_len)) {
+        return GENERIC_ARG_BYTES_READ_ERROR;
+    }
+    // Parse the owners vector from the sub-buffer
+    buffer_t owners_buf = {.ptr = owners_arg_ptr, .size = owners_arg_len, .offset = 0};
+    uint32_t num_owners = 0;
+    if (!bcs_read_u32_from_uleb128(&owners_buf, &num_owners)) {
+        return ARGS_SIZE_READ_ERROR;
+    }
+    owners->num_owners = num_owners;
+    owners->num_owners_displayed =
+        (num_owners < MAX_MULTISIG_OWNERS) ? num_owners : MAX_MULTISIG_OWNERS;
+    for (size_t i = 0; i < owners->num_owners_displayed; i++) {
+        if (!bcs_read_fixed_bytes(&owners_buf, owners->owners[i], ADDRESS_LEN)) {
+            return RECEIVER_ADDR_READ_ERROR;
+        }
+    }
+
+    // Arg 2: num_signatures_required (u64)
+    uint32_t sig_len = 0;
+    if (!bcs_read_u32_from_uleb128(buf, &sig_len)) {
+        return AMOUNT_LEN_READ_ERROR;
+    }
+    if (sig_len != sizeof(uint64_t)) {
+        return WRONG_AMOUNT_LEN_ERROR;
+    }
+    if (!bcs_read_u64(buf, &owners->num_signatures_required)) {
+        return AMOUNT_READ_ERROR;
+    }
+
+    // Skip remaining args (metadata vectors)
+    for (size_t i = 2; i < payload->args.args_size; i++) {
+        uint32_t arg_len = 0;
+        if (!bcs_read_u32_from_uleb128(buf, &arg_len)) {
+            return GENERIC_ARG_LEN_READ_ERROR;
+        }
+        if (arg_len > 0 && !buffer_seek_cur(buf, arg_len)) {
+            return GENERIC_ARG_BYTES_READ_ERROR;
+        }
+    }
+
+    return PARSING_OK;
+}
+
 entry_function_known_type_t determine_function_type(transaction_t *tx) {
     if (tx->payload_variant != PAYLOAD_ENTRY_FUNCTION) {
         return FUNC_UNKNOWN;
@@ -1019,6 +1155,32 @@ entry_function_known_type_t determine_function_type(transaction_t *tx) {
                           "create_transaction_with_hash",
                           27)) {
             return FUNC_MULTISIG_CREATE_WITH_HASH;
+        }
+        if (bcs_cmp_bytes(&tx->payload.entry_function.function_name,
+                          "approve_transaction",
+                          19)) {
+            return FUNC_MULTISIG_APPROVE;
+        }
+        if (bcs_cmp_bytes(&tx->payload.entry_function.function_name,
+                          "reject_transaction",
+                          18)) {
+            return FUNC_MULTISIG_REJECT;
+        }
+        if (bcs_cmp_bytes(&tx->payload.entry_function.function_name,
+                          "vote_transaction",
+                          16) ||
+            bcs_cmp_bytes(&tx->payload.entry_function.function_name,
+                          "vote_transanction",
+                          17)) {
+            return FUNC_MULTISIG_VOTE;
+        }
+        if (bcs_cmp_bytes(&tx->payload.entry_function.function_name,
+                          "create_with_owners",
+                          18) ||
+            bcs_cmp_bytes(&tx->payload.entry_function.function_name,
+                          "create_with_owners_then_remove_bootstrapper",
+                          43)) {
+            return FUNC_MULTISIG_CREATE_WITH_OWNERS;
         }
     }
 
