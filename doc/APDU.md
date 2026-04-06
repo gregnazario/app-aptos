@@ -7,7 +7,7 @@ The communication protocol used by [BOLOS](https://ledger.readthedocs.io/en/late
 - Maximum size of APDU command is 260 bytes: 5 bytes of header + 255 bytes of data
 - Maximum size of APDU response is 260 bytes: 258 bytes of response data + 2 bytes of status word
 
-Status words tend to be similar to common [APDU responses](https://www.eftlab.com/knowledge-base/complete-list-of-apdu-responses/) in the industry.
+Status words tend to be similar to common [APDU responses](https://www.eftlab.com/knowledge-base/complete-list-of-apdu-responses/) in the industry. See [COMMANDS.md](COMMANDS.md#error-code-reference) for a full error code reference with user-friendly descriptions and troubleshooting guidance.
 
 ## Command APDU
 
