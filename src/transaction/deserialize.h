@@ -31,4 +31,10 @@ parser_status_e fa_transfer_function_deserialize(buffer_t *buf, transaction_t *t
 
 parser_status_e delegation_pool_deserialize(buffer_t *buf, transaction_t *tx);
 
+parser_status_e generic_entry_function_deserialize(buffer_t *buf, transaction_t *tx);
+
+parser_status_e script_payload_deserialize(buffer_t *buf, transaction_t *tx);
+
+parser_status_e multisig_payload_deserialize(buffer_t *buf, transaction_t *tx);
+
 entry_function_known_type_t determine_function_type(transaction_t *tx);

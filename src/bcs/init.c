@@ -47,6 +47,7 @@ void transaction_init(aptos_transaction_t *tx) {
     tx->tx_variant = TX_UNDEFINED;
     tx->sequence = 0;
     tx->payload_variant = PAYLOAD_UNDEFINED;
+    memset(&tx->multisig_meta, 0, sizeof(tx->multisig_meta));
     tx->max_gas_amount = 0;
     tx->gas_unit_price = 0;
     tx->expiration_timestamp_secs = 0;

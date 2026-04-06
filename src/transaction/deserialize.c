@@ -97,11 +97,9 @@ parser_status_e tx_raw_deserialize(buffer_t *buf, transaction_t *tx) {
             }
             return PARSING_OK;
         case PAYLOAD_SCRIPT:
-            // TODO: implement script fields parsing
-            return PARSING_OK;
+            return script_payload_deserialize(buf, tx);
         case PAYLOAD_MULTISIG:
-            // TODO: implement multisig fields parsing
-            return PARSING_OK;
+            return multisig_payload_deserialize(buf, tx);
         default:
             return PAYLOAD_UNDEFINED_ERROR;
     }
@@ -189,7 +187,7 @@ parser_status_e entry_function_payload_deserialize(buffer_t *buf, transaction_t 
         case FUNC_WITHDRAW_STAKE:
             return delegation_pool_deserialize(buf, tx);
         default:
-            return PARSING_OK;
+            return generic_entry_function_deserialize(buf, tx);
     }
 
     return PARSING_OK;
@@ -508,6 +506,291 @@ parser_status_e delegation_pool_deserialize(buffer_t *buf, transaction_t *tx) {
     //  read amount field
     if (!bcs_read_u64(buf, &payload->args.delegation.amount)) {
         return AMOUNT_READ_ERROR;
+    }
+
+    return PARSING_OK;
+}
+
+static parser_status_e skip_type_tag(buffer_t *buf, uint8_t depth) {
+    if (depth > MAX_TYPE_TAG_DEPTH) {
+        return TYPE_TAG_SKIP_ERROR;
+    }
+
+    uint32_t variant = 0;
+    if (!bcs_read_u32_from_uleb128(buf, &variant)) {
+        return TYPE_TAG_SKIP_ERROR;
+    }
+
+    switch (variant) {
+        case TYPE_TAG_BOOL:
+        case TYPE_TAG_U8:
+        case TYPE_TAG_U16:
+        case TYPE_TAG_U32:
+        case TYPE_TAG_U64:
+        case TYPE_TAG_U128:
+        case TYPE_TAG_U256:
+        case TYPE_TAG_ADDRESS:
+        case TYPE_TAG_SIGNER:
+            // Primitive type tags have no additional data
+            return PARSING_OK;
+        case TYPE_TAG_VECTOR:
+            // Vector contains one inner type tag
+            return skip_type_tag(buf, depth + 1);
+        case TYPE_TAG_STRUCT: {
+            // Struct: address (32 bytes) + module_name (string) + name (string) + type_args
+            if (!buffer_can_read(buf, ADDRESS_LEN)) {
+                return TYPE_TAG_SKIP_ERROR;
+            }
+            if (!buffer_seek_cur(buf, ADDRESS_LEN)) {
+                return TYPE_TAG_SKIP_ERROR;
+            }
+            // Skip module name (ULEB128 length + bytes)
+            uint32_t module_len = 0;
+            if (!bcs_read_u32_from_uleb128(buf, &module_len)) {
+                return TYPE_TAG_SKIP_ERROR;
+            }
+            if (!buffer_seek_cur(buf, module_len)) {
+                return TYPE_TAG_SKIP_ERROR;
+            }
+            // Skip struct name (ULEB128 length + bytes)
+            uint32_t name_len = 0;
+            if (!bcs_read_u32_from_uleb128(buf, &name_len)) {
+                return TYPE_TAG_SKIP_ERROR;
+            }
+            if (!buffer_seek_cur(buf, name_len)) {
+                return TYPE_TAG_SKIP_ERROR;
+            }
+            // Skip nested type args
+            uint32_t num_type_args = 0;
+            if (!bcs_read_u32_from_uleb128(buf, &num_type_args)) {
+                return TYPE_TAG_SKIP_ERROR;
+            }
+            for (uint32_t i = 0; i < num_type_args; i++) {
+                parser_status_e status = skip_type_tag(buf, depth + 1);
+                if (status != PARSING_OK) {
+                    return status;
+                }
+            }
+            return PARSING_OK;
+        }
+        default:
+            return TYPE_TAG_SKIP_ERROR;
+    }
+}
+
+static parser_status_e skip_all_type_args(buffer_t *buf) {
+    uint32_t num_type_args = 0;
+    if (!bcs_read_u32_from_uleb128(buf, &num_type_args)) {
+        return TYPE_ARGS_SIZE_READ_ERROR;
+    }
+    for (uint32_t i = 0; i < num_type_args; i++) {
+        parser_status_e status = skip_type_tag(buf, 0);
+        if (status != PARSING_OK) {
+            return status;
+        }
+    }
+    return PARSING_OK;
+}
+
+static generic_arg_type_t infer_arg_type(uint32_t len) {
+    switch (len) {
+        case 1:
+            return ARG_TYPE_U8;
+        case 2:
+            return ARG_TYPE_U16;
+        case 4:
+            return ARG_TYPE_U32;
+        case 8:
+            return ARG_TYPE_U64;
+        case 16:
+            return ARG_TYPE_U128;
+        case 32:
+            return ARG_TYPE_ADDRESS;
+        default:
+            return ARG_TYPE_BYTES;
+    }
+}
+
+parser_status_e generic_entry_function_deserialize(buffer_t *buf, transaction_t *tx) {
+    if (tx->payload_variant != PAYLOAD_ENTRY_FUNCTION) {
+        return PAYLOAD_UNDEFINED_ERROR;
+    }
+    entry_function_payload_t *payload = &tx->payload.entry_function;
+    args_generic_t *generic = &payload->args.generic;
+
+    // Skip type arguments (we don't need them for display)
+    parser_status_e status = skip_all_type_args(buf);
+    if (status != PARSING_OK) {
+        return status;
+    }
+
+    // Read number of function arguments
+    uint32_t num_args = 0;
+    if (!bcs_read_u32_from_uleb128(buf, &num_args)) {
+        return ARGS_SIZE_READ_ERROR;
+    }
+    generic->num_args = num_args;
+    generic->num_parsed = (num_args < MAX_GENERIC_ARGS) ? num_args : MAX_GENERIC_ARGS;
+
+    // Parse up to MAX_GENERIC_ARGS arguments
+    for (size_t i = 0; i < generic->num_parsed; i++) {
+        uint32_t arg_len = 0;
+        if (!bcs_read_u32_from_uleb128(buf, &arg_len)) {
+            return GENERIC_ARG_LEN_READ_ERROR;
+        }
+        generic->args[i].raw_len = arg_len;
+        if (arg_len > 0) {
+            if (!bcs_read_ptr_to_fixed_bytes(buf, &generic->args[i].raw_ptr, arg_len)) {
+                return GENERIC_ARG_BYTES_READ_ERROR;
+            }
+        } else {
+            generic->args[i].raw_ptr = NULL;
+        }
+        generic->args[i].type = infer_arg_type(arg_len);
+    }
+
+    // Skip remaining arguments beyond MAX_GENERIC_ARGS
+    for (size_t i = generic->num_parsed; i < num_args; i++) {
+        uint32_t arg_len = 0;
+        if (!bcs_read_u32_from_uleb128(buf, &arg_len)) {
+            return GENERIC_ARG_LEN_READ_ERROR;
+        }
+        if (arg_len > 0 && !buffer_seek_cur(buf, arg_len)) {
+            return GENERIC_ARG_BYTES_READ_ERROR;
+        }
+    }
+
+    return PARSING_OK;
+}
+
+parser_status_e script_payload_deserialize(buffer_t *buf, transaction_t *tx) {
+    if (tx->payload_variant != PAYLOAD_SCRIPT) {
+        return PAYLOAD_UNDEFINED_ERROR;
+    }
+    script_payload_parsed_t *script = &tx->payload.script_parsed;
+    memset(script, 0, sizeof(*script));
+
+    // Read and skip script bytecode
+    uint32_t code_len = 0;
+    if (!bcs_read_u32_from_uleb128(buf, &code_len)) {
+        return SCRIPT_CODE_LEN_READ_ERROR;
+    }
+    script->code_len = code_len;
+    if (code_len > 0 && !buffer_seek_cur(buf, code_len)) {
+        return SCRIPT_CODE_READ_ERROR;
+    }
+
+    // Skip type arguments
+    parser_status_e status = skip_all_type_args(buf);
+    if (status != PARSING_OK) {
+        return status;
+    }
+
+    // Read number of script arguments (TransactionArgument enum, self-typed)
+    uint32_t num_args = 0;
+    if (!bcs_read_u32_from_uleb128(buf, &num_args)) {
+        return ARGS_SIZE_READ_ERROR;
+    }
+    script->num_args = num_args;
+    script->num_parsed = (num_args < MAX_GENERIC_ARGS) ? num_args : MAX_GENERIC_ARGS;
+
+    for (size_t i = 0; i < num_args; i++) {
+        uint32_t variant = 0;
+        if (!bcs_read_u32_from_uleb128(buf, &variant)) {
+            return SCRIPT_ARG_VARIANT_READ_ERROR;
+        }
+
+        uint32_t arg_len = 0;
+        switch (variant) {
+            case SCRIPT_ARG_BOOL:
+            case SCRIPT_ARG_U8:
+                arg_len = 1;
+                break;
+            case SCRIPT_ARG_U16:
+                arg_len = 2;
+                break;
+            case SCRIPT_ARG_U32:
+                arg_len = 4;
+                break;
+            case SCRIPT_ARG_U64:
+                arg_len = 8;
+                break;
+            case SCRIPT_ARG_U128:
+                arg_len = 16;
+                break;
+            case SCRIPT_ARG_ADDRESS:
+                arg_len = ADDRESS_LEN;
+                break;
+            case SCRIPT_ARG_U256:
+                arg_len = 32;
+                break;
+            case SCRIPT_ARG_U8_VECTOR: {
+                uint32_t vec_len = 0;
+                if (!bcs_read_u32_from_uleb128(buf, &vec_len)) {
+                    return SCRIPT_ARG_READ_ERROR;
+                }
+                arg_len = vec_len;
+                break;
+            }
+            default:
+                return SCRIPT_ARG_VARIANT_READ_ERROR;
+        }
+
+        if (i < script->num_parsed) {
+            script->args[i].variant = (script_arg_variant_t) variant;
+            script->args[i].raw_len = arg_len;
+            if (arg_len > 0) {
+                if (!bcs_read_ptr_to_fixed_bytes(buf, &script->args[i].raw_ptr, arg_len)) {
+                    return SCRIPT_ARG_READ_ERROR;
+                }
+            } else {
+                script->args[i].raw_ptr = NULL;
+            }
+        } else {
+            // Skip remaining args
+            if (arg_len > 0 && !buffer_seek_cur(buf, arg_len)) {
+                return SCRIPT_ARG_READ_ERROR;
+            }
+        }
+    }
+
+    return PARSING_OK;
+}
+
+parser_status_e multisig_payload_deserialize(buffer_t *buf, transaction_t *tx) {
+    if (tx->payload_variant != PAYLOAD_MULTISIG) {
+        return PAYLOAD_UNDEFINED_ERROR;
+    }
+
+    // Read multisig address
+    if (!bcs_read_fixed_bytes(buf, tx->multisig_meta.multisig_address, ADDRESS_LEN)) {
+        return MULTISIG_ADDRESS_READ_ERROR;
+    }
+
+    // Read option tag for inner entry function
+    bool has_inner = false;
+    if (!bcs_read_bool(buf, &has_inner)) {
+        return MULTISIG_OPTION_READ_ERROR;
+    }
+    tx->multisig_meta.has_inner_entry_function = has_inner;
+
+    if (has_inner) {
+        // Read MultisigTransactionPayload enum discriminant
+        // MultisigTransactionPayload::EntryFunction is variant 0 (not the outer TransactionPayload
+        // variant)
+        uint32_t inner_variant = 0;
+        if (!bcs_read_u32_from_uleb128(buf, &inner_variant)) {
+            return PAYLOAD_VARIANT_READ_ERROR;
+        }
+        if (inner_variant != 0) {
+            return PAYLOAD_UNDEFINED_ERROR;
+        }
+        // Temporarily set payload_variant so inner deserializer works
+        tx->payload_variant = PAYLOAD_ENTRY_FUNCTION;
+        parser_status_e status = entry_function_payload_deserialize(buf, tx);
+        // Restore multisig variant
+        tx->payload_variant = PAYLOAD_MULTISIG;
+        return status;
     }
 
     return PARSING_OK;

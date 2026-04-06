@@ -1,5 +1,6 @@
 #pragma once
 
+#include <stdbool.h>
 #include <stdint.h>
 #include <stddef.h>
 
@@ -53,6 +54,9 @@ typedef enum {
     TYPE_TAG_SIGNER = 5,
     TYPE_TAG_VECTOR = 6,
     TYPE_TAG_STRUCT = 7,
+    TYPE_TAG_U16 = 8,
+    TYPE_TAG_U32 = 9,
+    TYPE_TAG_U256 = 10,
     TYPE_TAG_UNDEFINED = 1000
 } type_tag_variant_t;
 
@@ -78,6 +82,67 @@ typedef struct {
 typedef struct {
     uint8_t address[ADDRESS_LEN];
 } fungible_asset_store_t;
+
+// Maximum number of generic args to display for unknown entry functions and scripts
+#define MAX_GENERIC_ARGS 6
+// Maximum recursion depth for skipping type tags
+#define MAX_TYPE_TAG_DEPTH 8
+
+// Inferred type for generic entry function arguments (based on BCS byte length)
+typedef enum {
+    ARG_TYPE_BOOL = 0,
+    ARG_TYPE_U8,
+    ARG_TYPE_U16,
+    ARG_TYPE_U32,
+    ARG_TYPE_U64,
+    ARG_TYPE_U128,
+    ARG_TYPE_ADDRESS,
+    ARG_TYPE_BYTES,
+} generic_arg_type_t;
+
+typedef struct {
+    generic_arg_type_t type;  // inferred from raw_len
+    uint32_t raw_len;         // BCS length-prefix value
+    uint8_t *raw_ptr;         // zero-copy pointer into raw_tx
+} generic_arg_t;
+
+typedef struct {
+    size_t num_args;    // total args in the function
+    size_t num_parsed;  // min(num_args, MAX_GENERIC_ARGS)
+    generic_arg_t args[MAX_GENERIC_ARGS];
+} args_generic_t;
+
+// Self-typed script argument variants (TransactionArgument enum in Aptos)
+typedef enum {
+    SCRIPT_ARG_U8 = 0,
+    SCRIPT_ARG_U64 = 1,
+    SCRIPT_ARG_U128 = 2,
+    SCRIPT_ARG_ADDRESS = 3,
+    SCRIPT_ARG_U8_VECTOR = 4,
+    SCRIPT_ARG_BOOL = 5,
+    SCRIPT_ARG_U16 = 6,
+    SCRIPT_ARG_U32 = 7,
+    SCRIPT_ARG_U256 = 8,
+} script_arg_variant_t;
+
+typedef struct {
+    script_arg_variant_t variant;
+    uint8_t *raw_ptr;
+    uint32_t raw_len;
+} script_arg_t;
+
+typedef struct {
+    uint32_t code_len;
+    size_t num_args;
+    size_t num_parsed;
+    script_arg_t args[MAX_GENERIC_ARGS];
+} script_payload_parsed_t;
+
+// Multisig payload metadata (stored outside payload union)
+typedef struct {
+    uint8_t multisig_address[ADDRESS_LEN];
+    bool has_inner_entry_function;
+} multisig_metadata_t;
 
 typedef enum {
     FUNC_UNKNOWN = 0,
@@ -132,6 +197,7 @@ typedef struct {
             args_coin_transfer_t coin_transfer;
             args_fungible_asset_transfer_t fa_transfer;
             args_delegation_pool_transfer_t delegation;
+            args_generic_t generic;
         };
     } args;
 } entry_function_payload_t;
@@ -164,8 +230,10 @@ typedef struct {
     uint8_t sender[ADDRESS_LEN];
     uint64_t sequence;
     payload_variant_t payload_variant;
+    multisig_metadata_t multisig_meta;  // valid when payload_variant == PAYLOAD_MULTISIG
     union {
         script_payload_t script;
+        script_payload_parsed_t script_parsed;
         entry_function_payload_t entry_function;
     } payload;
     uint64_t max_gas_amount;
