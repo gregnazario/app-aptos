@@ -1160,7 +1160,7 @@ entry_function_known_type_t determine_function_type(transaction_t *tx) {
         }
         if (bcs_cmp_bytes(&tx->payload.entry_function.function_name,
                           "create_transaction_with_hash",
-                          27)) {
+                          28)) {
             return FUNC_MULTISIG_CREATE_WITH_HASH;
         }
         if (bcs_cmp_bytes(&tx->payload.entry_function.function_name,
