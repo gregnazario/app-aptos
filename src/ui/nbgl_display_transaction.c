@@ -451,4 +451,85 @@ int ui_display_multisig_payload() {
 
     return ret;
 }
+
+int ui_display_multisig_create_transaction() {
+    const int ret = ui_prepare_multisig_create_transaction();
+    if (ret == UI_PREPARED) {
+        int idx = 0;
+        pairs[idx].item = "Transaction type";
+        pairs[idx].value = g_tx_type;
+        idx++;
+        pairs[idx].item = "Multisig";
+        pairs[idx].value = g_multisig_addr;
+        idx++;
+        pairs[idx].item = "Inner function";
+        pairs[idx].value = g_function;
+        idx++;
+
+        for (int i = 0; i < g_num_display_args; i++) {
+            pairs[idx].item = g_arg_labels[i];
+            pairs[idx].value = g_arg_values[i];
+            idx++;
+        }
+
+        if (g_extra_info[0] != '\0') {
+            pairs[idx].item = "Note";
+            pairs[idx].value = g_extra_info;
+            idx++;
+        }
+
+        pairs[idx].item = "Gas fee";
+        pairs[idx].value = g_gas_fee;
+        idx++;
+
+        pair_list.nbMaxLinesForValue = 0;
+        pair_list.nbPairs = idx;
+        pair_list.pairs = pairs;
+
+        nbgl_useCaseReview(TYPE_TRANSACTION,
+                           &pair_list,
+                           &ICON_APP_HOME,
+                           "Review multisig proposal",
+                           NULL,
+                           "Sign transaction?",
+                           review_choice);
+        return 0;
+    }
+
+    return ret;
+}
+
+int ui_display_multisig_create_hash() {
+    const int ret = ui_prepare_multisig_create_hash();
+    if (ret == UI_PREPARED) {
+        int idx = 0;
+        pairs[idx].item = "Transaction type";
+        pairs[idx].value = g_tx_type;
+        idx++;
+        pairs[idx].item = "Multisig";
+        pairs[idx].value = g_multisig_addr;
+        idx++;
+        pairs[idx].item = "Payload hash";
+        pairs[idx].value = g_function;
+        idx++;
+        pairs[idx].item = "Gas fee";
+        pairs[idx].value = g_gas_fee;
+        idx++;
+
+        pair_list.nbMaxLinesForValue = 0;
+        pair_list.nbPairs = idx;
+        pair_list.pairs = pairs;
+
+        nbgl_useCaseReview(TYPE_TRANSACTION,
+                           &pair_list,
+                           &ICON_APP_HOME,
+                           "Review multisig proposal",
+                           NULL,
+                           "Sign transaction?",
+                           review_choice);
+        return 0;
+    }
+
+    return ret;
+}
 #endif

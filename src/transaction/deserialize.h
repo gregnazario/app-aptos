@@ -33,6 +33,10 @@ parser_status_e delegation_pool_deserialize(buffer_t *buf, transaction_t *tx);
 
 parser_status_e generic_entry_function_deserialize(buffer_t *buf, transaction_t *tx);
 
+parser_status_e multisig_create_transaction_deserialize(buffer_t *buf, transaction_t *tx);
+
+parser_status_e multisig_create_hash_deserialize(buffer_t *buf, transaction_t *tx);
+
 parser_status_e script_payload_deserialize(buffer_t *buf, transaction_t *tx);
 
 parser_status_e multisig_payload_deserialize(buffer_t *buf, transaction_t *tx);

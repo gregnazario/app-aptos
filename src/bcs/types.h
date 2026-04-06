@@ -154,6 +154,8 @@ typedef enum {
     FUNC_UNLOCK_STAKE = 6,
     FUNC_REACTIVATE_STAKE = 7,
     FUNC_WITHDRAW_STAKE = 8,
+    FUNC_MULTISIG_CREATE_TRANSACTION = 9,
+    FUNC_MULTISIG_CREATE_WITH_HASH = 10,
 } entry_function_known_type_t;
 
 typedef struct {
@@ -184,6 +186,24 @@ typedef struct {
     uint64_t amount;
 } args_delegation_pool_transfer_t;
 
+// Args for 0x1::multisig_account::create_transaction
+// Decodes the inner entry function from arg2's BCS blob
+typedef struct {
+    uint8_t multisig_address[ADDRESS_LEN];
+    // Decoded inner entry function from arg2
+    uint8_t inner_module_address[ADDRESS_LEN];
+    fixed_bytes_t inner_module_name;
+    fixed_bytes_t inner_function_name;
+    args_generic_t inner_args;
+} args_multisig_create_t;
+
+// Args for 0x1::multisig_account::create_transaction_with_hash
+typedef struct {
+    uint8_t multisig_address[ADDRESS_LEN];
+    uint8_t *payload_hash;  // pointer into raw_tx
+    uint32_t payload_hash_len;
+} args_multisig_create_hash_t;
+
 typedef struct {
     module_id_t module_id;
     fixed_bytes_t function_name;
@@ -198,6 +218,8 @@ typedef struct {
             args_fungible_asset_transfer_t fa_transfer;
             args_delegation_pool_transfer_t delegation;
             args_generic_t generic;
+            args_multisig_create_t multisig_create;
+            args_multisig_create_hash_t multisig_create_hash;
         };
     } args;
 } entry_function_payload_t;

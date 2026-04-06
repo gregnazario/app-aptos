@@ -186,6 +186,10 @@ parser_status_e entry_function_payload_deserialize(buffer_t *buf, transaction_t 
         case FUNC_REACTIVATE_STAKE:
         case FUNC_WITHDRAW_STAKE:
             return delegation_pool_deserialize(buf, tx);
+        case FUNC_MULTISIG_CREATE_TRANSACTION:
+            return multisig_create_transaction_deserialize(buf, tx);
+        case FUNC_MULTISIG_CREATE_WITH_HASH:
+            return multisig_create_hash_deserialize(buf, tx);
         default:
             return generic_entry_function_deserialize(buf, tx);
     }
@@ -796,6 +800,185 @@ parser_status_e multisig_payload_deserialize(buffer_t *buf, transaction_t *tx) {
     return PARSING_OK;
 }
 
+parser_status_e multisig_create_transaction_deserialize(buffer_t *buf, transaction_t *tx) {
+    if (tx->payload_variant != PAYLOAD_ENTRY_FUNCTION) {
+        return PAYLOAD_UNDEFINED_ERROR;
+    }
+    entry_function_payload_t *payload = &tx->payload.entry_function;
+    args_multisig_create_t *create = &payload->args.multisig_create;
+
+    // Read type args size (should be 0)
+    if (!bcs_read_u32_from_uleb128(buf, (uint32_t *) &payload->args.ty_size)) {
+        return TYPE_ARGS_SIZE_READ_ERROR;
+    }
+    if (payload->args.ty_size != 0) {
+        return TYPE_ARGS_SIZE_UNEXPECTED_ERROR;
+    }
+
+    // Read args count (should be 2: multisig_address + payload_bytes)
+    if (!bcs_read_u32_from_uleb128(buf, (uint32_t *) &payload->args.args_size)) {
+        return ARGS_SIZE_READ_ERROR;
+    }
+    if (payload->args.args_size != 2) {
+        return ARGS_SIZE_UNEXPECTED_ERROR;
+    }
+
+    // Arg 1: multisig address
+    uint32_t addr_len = 0;
+    if (!bcs_read_u32_from_uleb128(buf, &addr_len)) {
+        return RECEIVER_ADDR_LEN_READ_ERROR;
+    }
+    if (addr_len != ADDRESS_LEN) {
+        return WRONG_ADDRESS_LEN_ERROR;
+    }
+    if (!bcs_read_fixed_bytes(buf, create->multisig_address, ADDRESS_LEN)) {
+        return MULTISIG_ADDRESS_READ_ERROR;
+    }
+
+    // Arg 2: BCS-encoded MultisigTransactionPayload
+    uint32_t payload_len = 0;
+    if (!bcs_read_u32_from_uleb128(buf, &payload_len)) {
+        return GENERIC_ARG_LEN_READ_ERROR;
+    }
+
+    // Get pointer to the raw inner payload bytes
+    uint8_t *inner_ptr = NULL;
+    if (!bcs_read_ptr_to_fixed_bytes(buf, &inner_ptr, payload_len)) {
+        return GENERIC_ARG_BYTES_READ_ERROR;
+    }
+
+    // Parse the inner payload: MultisigTransactionPayload enum
+    buffer_t inner_buf = {.ptr = inner_ptr, .size = payload_len, .offset = 0};
+
+    // Read MultisigTransactionPayload variant (0 = EntryFunction)
+    uint32_t inner_variant = 0;
+    if (!bcs_read_u32_from_uleb128(&inner_buf, &inner_variant)) {
+        return PAYLOAD_VARIANT_READ_ERROR;
+    }
+    if (inner_variant != 0) {
+        return PAYLOAD_UNDEFINED_ERROR;
+    }
+
+    // Parse inner entry function: module_id + function_name
+    if (!bcs_read_fixed_bytes(&inner_buf, create->inner_module_address, ADDRESS_LEN)) {
+        return MODULE_ID_ADDR_READ_ERROR;
+    }
+    if (!bcs_read_u32_from_uleb128(&inner_buf, (uint32_t *) &create->inner_module_name.len)) {
+        return MODULE_ID_NAME_LEN_READ_ERROR;
+    }
+    if (!bcs_read_ptr_to_fixed_bytes(&inner_buf,
+                                     &create->inner_module_name.bytes,
+                                     create->inner_module_name.len)) {
+        return MODULE_ID_NAME_BYTES_READ_ERROR;
+    }
+    if (!bcs_read_u32_from_uleb128(&inner_buf, (uint32_t *) &create->inner_function_name.len)) {
+        return FUNCTION_NAME_LEN_READ_ERROR;
+    }
+    if (!bcs_read_ptr_to_fixed_bytes(&inner_buf,
+                                     &create->inner_function_name.bytes,
+                                     create->inner_function_name.len)) {
+        return FUNCTION_NAME_BYTES_READ_ERROR;
+    }
+
+    // Skip inner type args
+    parser_status_e status = skip_all_type_args(&inner_buf);
+    if (status != PARSING_OK) {
+        return status;
+    }
+
+    // Parse inner function args generically
+    uint32_t num_inner_args = 0;
+    if (!bcs_read_u32_from_uleb128(&inner_buf, &num_inner_args)) {
+        return ARGS_SIZE_READ_ERROR;
+    }
+    create->inner_args.num_args = num_inner_args;
+    create->inner_args.num_parsed =
+        (num_inner_args < MAX_GENERIC_ARGS) ? num_inner_args : MAX_GENERIC_ARGS;
+
+    for (size_t i = 0; i < create->inner_args.num_parsed; i++) {
+        uint32_t arg_len = 0;
+        if (!bcs_read_u32_from_uleb128(&inner_buf, &arg_len)) {
+            return GENERIC_ARG_LEN_READ_ERROR;
+        }
+        create->inner_args.args[i].raw_len = arg_len;
+        if (arg_len > 0) {
+            if (!bcs_read_ptr_to_fixed_bytes(&inner_buf,
+                                             &create->inner_args.args[i].raw_ptr,
+                                             arg_len)) {
+                return GENERIC_ARG_BYTES_READ_ERROR;
+            }
+        } else {
+            create->inner_args.args[i].raw_ptr = NULL;
+        }
+        create->inner_args.args[i].type = infer_arg_type(arg_len);
+    }
+
+    // Skip remaining inner args
+    for (size_t i = create->inner_args.num_parsed; i < num_inner_args; i++) {
+        uint32_t arg_len = 0;
+        if (!bcs_read_u32_from_uleb128(&inner_buf, &arg_len)) {
+            return GENERIC_ARG_LEN_READ_ERROR;
+        }
+        if (arg_len > 0) {
+            if (!buffer_seek_cur(&inner_buf, arg_len)) {
+                return GENERIC_ARG_BYTES_READ_ERROR;
+            }
+        }
+    }
+
+    return PARSING_OK;
+}
+
+parser_status_e multisig_create_hash_deserialize(buffer_t *buf, transaction_t *tx) {
+    if (tx->payload_variant != PAYLOAD_ENTRY_FUNCTION) {
+        return PAYLOAD_UNDEFINED_ERROR;
+    }
+    entry_function_payload_t *payload = &tx->payload.entry_function;
+    args_multisig_create_hash_t *create = &payload->args.multisig_create_hash;
+
+    // Read type args (should be 0)
+    if (!bcs_read_u32_from_uleb128(buf, (uint32_t *) &payload->args.ty_size)) {
+        return TYPE_ARGS_SIZE_READ_ERROR;
+    }
+    if (payload->args.ty_size != 0) {
+        return TYPE_ARGS_SIZE_UNEXPECTED_ERROR;
+    }
+
+    // Read args count (should be 2)
+    if (!bcs_read_u32_from_uleb128(buf, (uint32_t *) &payload->args.args_size)) {
+        return ARGS_SIZE_READ_ERROR;
+    }
+    if (payload->args.args_size != 2) {
+        return ARGS_SIZE_UNEXPECTED_ERROR;
+    }
+
+    // Arg 1: multisig address
+    uint32_t addr_len = 0;
+    if (!bcs_read_u32_from_uleb128(buf, &addr_len)) {
+        return RECEIVER_ADDR_LEN_READ_ERROR;
+    }
+    if (addr_len != ADDRESS_LEN) {
+        return WRONG_ADDRESS_LEN_ERROR;
+    }
+    if (!bcs_read_fixed_bytes(buf, create->multisig_address, ADDRESS_LEN)) {
+        return MULTISIG_ADDRESS_READ_ERROR;
+    }
+
+    // Arg 2: payload hash (variable-length bytes)
+    if (!bcs_read_u32_from_uleb128(buf, &create->payload_hash_len)) {
+        return GENERIC_ARG_LEN_READ_ERROR;
+    }
+    if (create->payload_hash_len > 0) {
+        if (!bcs_read_ptr_to_fixed_bytes(buf, &create->payload_hash, create->payload_hash_len)) {
+            return GENERIC_ARG_BYTES_READ_ERROR;
+        }
+    } else {
+        create->payload_hash = NULL;
+    }
+
+    return PARSING_OK;
+}
+
 entry_function_known_type_t determine_function_type(transaction_t *tx) {
     if (tx->payload_variant != PAYLOAD_ENTRY_FUNCTION) {
         return FUNC_UNKNOWN;
@@ -823,6 +1006,20 @@ entry_function_known_type_t determine_function_type(transaction_t *tx) {
         bcs_cmp_bytes(&tx->payload.entry_function.module_id.name, "primary_fungible_store", 22) &&
         bcs_cmp_bytes(&tx->payload.entry_function.function_name, "transfer", 8)) {
         return FUNC_FUNGIBLE_STORE_TRANSFER;
+    }
+
+    if (tx->payload.entry_function.module_id.address[ADDRESS_LEN - 1] == 0x01 &&
+        bcs_cmp_bytes(&tx->payload.entry_function.module_id.name, "multisig_account", 16)) {
+        if (bcs_cmp_bytes(&tx->payload.entry_function.function_name,
+                          "create_transaction",
+                          18)) {
+            return FUNC_MULTISIG_CREATE_TRANSACTION;
+        }
+        if (bcs_cmp_bytes(&tx->payload.entry_function.function_name,
+                          "create_transaction_with_hash",
+                          27)) {
+            return FUNC_MULTISIG_CREATE_WITH_HASH;
+        }
     }
 
     if (tx->payload.entry_function.module_id.address[ADDRESS_LEN - 1] == 0x01 &&

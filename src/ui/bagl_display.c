@@ -750,11 +750,12 @@ int ui_display_script_payload() {
     return ret;
 }
 
-// Multisig no-payload flow: shows tx type + multisig address + gas
-UX_FLOW(ux_display_multisig_no_payload_flow,
+// Multisig execute flow: shows tx type + multisig address + warning + gas
+UX_FLOW(ux_display_multisig_execute_flow,
         &ux_display_review_step,
         &ux_display_tx_type_step,
         &ux_display_multisig_addr_step,
+        &ux_display_extra_info_step,
         &ux_display_gas_fee_step,
         &ux_display_approve_step,
         &ux_display_reject_step);
@@ -766,8 +767,40 @@ int ui_display_multisig_payload() {
         if (tx->multisig_meta.has_inner_entry_function) {
             ui_flow_display(get_generic_flow(g_num_display_args));
         } else {
-            ui_flow_display(ux_display_multisig_no_payload_flow);
+            ui_flow_display(ux_display_multisig_execute_flow);
         }
+        return 0;
+    }
+
+    return ret;
+}
+
+// Multisig create_transaction: uses generic flow (shows inner function + args)
+int ui_display_multisig_create_transaction() {
+    const int ret = ui_prepare_multisig_create_transaction();
+    if (ret == UI_PREPARED) {
+        ui_flow_display(get_generic_flow(g_num_display_args));
+        return 0;
+    }
+
+    return ret;
+}
+
+// Multisig create_transaction_with_hash: shows tx type + multisig + hash + gas
+// Reuse the generic 0-args flow (function field holds the hash)
+UX_FLOW(ux_display_multisig_hash_flow,
+        &ux_display_review_step,
+        &ux_display_tx_type_step,
+        &ux_display_multisig_addr_step,
+        &ux_display_function_step,
+        &ux_display_gas_fee_step,
+        &ux_display_approve_step,
+        &ux_display_reject_step);
+
+int ui_display_multisig_create_hash() {
+    const int ret = ui_prepare_multisig_create_hash();
+    if (ret == UI_PREPARED) {
+        ui_flow_display(ux_display_multisig_hash_flow);
         return 0;
     }
 

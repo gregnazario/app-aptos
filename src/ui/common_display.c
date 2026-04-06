@@ -356,6 +356,10 @@ int ui_prepare_entry_function() {
         case FUNC_REACTIVATE_STAKE:
         case FUNC_WITHDRAW_STAKE:
             return ui_display_delegation_pool_transfer(function->known_type);
+        case FUNC_MULTISIG_CREATE_TRANSACTION:
+            return ui_display_multisig_create_transaction();
+        case FUNC_MULTISIG_CREATE_WITH_HASH:
+            return ui_display_multisig_create_hash();
         default:
             return ui_display_generic_entry_function();
     }
@@ -744,8 +748,97 @@ int ui_prepare_multisig_payload() {
         }
     } else {
         memset(g_tx_type, 0, sizeof(g_tx_type));
-        snprintf(g_tx_type, sizeof(g_tx_type), "Multisig (no payload)");
+        snprintf(g_tx_type, sizeof(g_tx_type), "Multisig execute");
+        memset(g_extra_info, 0, sizeof(g_extra_info));
+        snprintf(g_extra_info, sizeof(g_extra_info), "Verify payload in wallet");
     }
+
+    return UI_PREPARED;
+}
+
+int ui_prepare_multisig_create_transaction() {
+    args_multisig_create_t *create =
+        &G_context.tx_info.transaction.payload.entry_function.args.multisig_create;
+
+    memset(g_tx_type, 0, sizeof(g_tx_type));
+    snprintf(g_tx_type, sizeof(g_tx_type), "Create multisig TX");
+
+    // Format the multisig address
+    memset(g_multisig_addr, 0, sizeof(g_multisig_addr));
+    if (0 > format_prefixed_hex(create->multisig_address,
+                                ADDRESS_LEN,
+                                g_multisig_addr,
+                                sizeof(g_multisig_addr))) {
+        return io_send_sw(SW_DISPLAY_ADDRESS_FAIL);
+    }
+
+    // Format inner function name
+    memset(g_function, 0, sizeof(g_function));
+    char inner_addr_hex[67] = {0};
+    size_t leading_zeros = count_leading_zeros(create->inner_module_address, ADDRESS_LEN - 1);
+    if (0 > format_prefixed_hex(create->inner_module_address + leading_zeros,
+                                ADDRESS_LEN - leading_zeros,
+                                inner_addr_hex,
+                                sizeof(inner_addr_hex))) {
+        return io_send_sw(SW_DISPLAY_ADDRESS_FAIL);
+    }
+    snprintf(g_function,
+             sizeof(g_function),
+             "%s::%.*s::%.*s",
+             inner_addr_hex,
+             (int) create->inner_module_name.len,
+             create->inner_module_name.bytes,
+             (int) create->inner_function_name.len,
+             create->inner_function_name.bytes);
+
+    // Format inner args generically
+    g_num_display_args = (int) create->inner_args.num_parsed;
+    for (int i = 0; i < g_num_display_args; i++) {
+        format_generic_arg(&create->inner_args.args[i], i);
+    }
+
+    memset(g_extra_info, 0, sizeof(g_extra_info));
+    if (create->inner_args.num_args > create->inner_args.num_parsed) {
+        snprintf(g_extra_info,
+                 sizeof(g_extra_info),
+                 "+%d more args",
+                 (int) (create->inner_args.num_args - create->inner_args.num_parsed));
+    }
+
+    return UI_PREPARED;
+}
+
+int ui_prepare_multisig_create_hash() {
+    args_multisig_create_hash_t *create =
+        &G_context.tx_info.transaction.payload.entry_function.args.multisig_create_hash;
+
+    memset(g_tx_type, 0, sizeof(g_tx_type));
+    snprintf(g_tx_type, sizeof(g_tx_type), "Create multisig TX");
+
+    // Format multisig address
+    memset(g_multisig_addr, 0, sizeof(g_multisig_addr));
+    if (0 > format_prefixed_hex(create->multisig_address,
+                                ADDRESS_LEN,
+                                g_multisig_addr,
+                                sizeof(g_multisig_addr))) {
+        return io_send_sw(SW_DISPLAY_ADDRESS_FAIL);
+    }
+
+    // Format the payload hash
+    memset(g_function, 0, sizeof(g_function));
+    if (create->payload_hash != NULL && create->payload_hash_len > 0) {
+        if (2 + create->payload_hash_len * 2 + 1 <= sizeof(g_function)) {
+            format_prefixed_hex(create->payload_hash,
+                                create->payload_hash_len,
+                                g_function,
+                                sizeof(g_function));
+        } else {
+            snprintf(g_function, sizeof(g_function), "(%d bytes)", (int) create->payload_hash_len);
+        }
+    }
+
+    g_num_display_args = 0;
+    memset(g_extra_info, 0, sizeof(g_extra_info));
 
     return UI_PREPARED;
 }
